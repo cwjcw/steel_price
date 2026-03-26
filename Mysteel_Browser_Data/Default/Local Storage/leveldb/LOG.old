@@ -1,6 +1,0 @@
-2026/03/26-12:26:01.836 6ec4 Reusing MANIFEST E:\code\steel_price\Mysteel_Browser_Data\Default\Local Storage\leveldb/MANIFEST-000001
-2026/03/26-12:26:01.843 6ec4 Recovering log #3
-2026/03/26-12:26:01.845 6ec4 Reusing old log E:\code\steel_price\Mysteel_Browser_Data\Default\Local Storage\leveldb/000003.log 
-2026/03/26-12:32:42.040 7dfc Level-0 table #5: started
-2026/03/26-12:32:42.042 7dfc Level-0 table #5: 18038 bytes OK
-2026/03/26-12:32:42.043 7dfc Delete type=0 #3
