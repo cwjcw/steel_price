@@ -82,6 +82,10 @@ def human_pause(low: float = 0.8, high: float = 1.6) -> None:
     time.sleep(random.uniform(low, high))
 
 
+def log_stage(stage: str) -> None:
+    print(f"[{datetime.now().strftime("%H:%M:%S")}] {stage}")
+
+
 def wait_until(page: ChromiumPage, condition_js: str, timeout: float = 10, interval: float = 0.25) -> bool:
     end = time.time() + timeout
     while time.time() < end:
@@ -201,6 +205,7 @@ def auto_login_if_needed(page: ChromiumPage, username: str, password: str, targe
     if not modal_ok:
         raise RuntimeError("Login modal did not appear")
 
+    log_stage("?????????")
     account_tab = page.ele(
         'xpath://div[contains(@class,"login-common")]//*[contains(@class,"form-tab-account") and contains(normalize-space(.),"' + ZH_ACCOUNT_LOGIN + '")]',
         timeout=6,
@@ -218,12 +223,15 @@ def auto_login_if_needed(page: ChromiumPage, username: str, password: str, targe
         'xpath://div[contains(@class,"login-common")]//div[contains(@class,"form-content") and not(contains(@style,"display: none"))]//div[contains(@class,"form-content-password")]//input[@type="password"]',
         timeout=6,
     )
+    log_stage("???????")
     if not input_value(username_input, username):
         raise RuntimeError("Could not fill username")
+    log_stage("??????")
     if not input_value(password_input, password):
         raise RuntimeError("Could not fill password")
     human_pause(1.0, 1.8)
 
+    log_stage("??????")
     login_button = page.ele(
         'xpath://div[contains(@class,"login-common")]//div[contains(@class,"form-button-login") and contains(normalize-space(.),"' + ZH_LOGIN + '")]',
         timeout=6,
@@ -245,6 +253,7 @@ def auto_login_if_needed(page: ChromiumPage, username: str, password: str, targe
         raise RuntimeError("Login did not complete in time")
 
     human_pause(2.0, 3.0)
+    log_stage("??????????????")
     ensure_price_page(page, target_url)
 
 
@@ -492,29 +501,45 @@ def wait_for_download(page: ChromiumPage, download_dir: Path, timeout: int = 60)
 
 
 def apply_filters(page: ChromiumPage, query: Query) -> None:
+    log_stage("????????")
     ensure_price_page(page, DEFAULT_URL)
     page.wait.ele_displayed(f'text={ZH_SPEC}', timeout=20)
     human_pause(1.0, 1.8)
     dismiss_intro_guide(page)
 
+    log_stage(f"??????: {query.product_name}")
     click_checkbox_in_group(page, ZH_PRODUCT, query.product_name)
+    log_stage(f"??????: {query.specification}")
     click_checkbox_in_group(page, ZH_SPEC, query.specification)
+    log_stage(f"??????: {query.material}")
     click_checkbox_in_group(page, ZH_MATERIAL, query.material)
 
+    log_stage(f"????????: {query.market_group}")
     pane_id = click_market_tab(page, query.market_group)
+    log_stage(f"??????: {query.market}")
     click_market_option(page, pane_id, query.market)
+    log_stage(f"??????: {query.mill}")
     click_checkbox_in_group(page, ZH_MILL, query.mill)
+    log_stage(f"????????: {query.price_scope}")
     click_radio_button_in_group(page, ZH_FREQUENCY, query.price_scope)
+    log_stage(f"??????????: {ZH_DATE_RANGE}")
     click_radio_in_group(page, ZH_PUBLISH_TIME, ZH_DATE_RANGE)
+    log_stage(f"????????: {query.publish_time}")
     click_publish_type(page, query.publish_time)
+    log_stage(f"??????: {query.target_date}")
     set_date_via_picker(page, query.target_date)
+    log_stage("??????")
     click_search(page)
 
 
 def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path:
+    log_stage("??????????")
     wait_for_result_row(page, query, timeout=20)
+    log_stage("????????")
     select_search_result(page, query)
+    log_stage("??????Excel")
     click_export_excel_button(page)
+    log_stage("????????")
     confirm_export_dialog(page)
     return wait_for_download(page, download_dir, timeout=90)
 
@@ -552,12 +577,14 @@ def main() -> int:
     page = create_page(Path(args.user_data_dir), download_dir)
 
     try:
+        log_stage("??????????")
         page.get(args.url)
         page.wait.load_start()
         page.wait.doc_loaded()
         human_pause(1.0, 1.8)
         auto_login_if_needed(page, TEST_USERNAME, TEST_PASSWORD, args.url)
         dismiss_intro_guide(page)
+        log_stage("???????")
         started_at = time.perf_counter()
         apply_filters(page, query)
         downloaded = export_excel(page, query, download_dir)
