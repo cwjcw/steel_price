@@ -1,0 +1,84 @@
+[shared]
+start_date = ""  # 留空时默认使用昨天日期，例如: 2026-03-25
+end_date = ""    # 留空时默认使用昨天日期，例如: 2026-03-25
+
+[strategies.cold_rolling.defaults]
+execution_strategy = "cold_rolling"
+category = "钢材"
+subcategory = "冷轧"
+price_scope = "按日期"
+publish_time = "全天价格"
+unit = "元/吨"
+
+[[strategies.cold_rolling.queries]]
+name = "冷卷_泰安_Q195"
+product_name = ["冷卷"]
+specification = ["1*1250*C"]
+material = ["Q195"]
+market_group = "QRSTU"
+market = ["泰安"]
+mill = ["泰山钢铁"]
+
+[strategies.hot_rolling.defaults]
+execution_strategy = "hot_rolling"
+category = "钢材"
+subcategory = "热轧"
+price_scope = "按日期"
+publish_time = "全天价格"
+unit = "元/吨"
+
+[[strategies.hot_rolling.queries]]
+name = "热轧酸洗板卷_上海_SPHC"
+product_name = ["热轧酸洗板卷"]
+specification = ["2.75*1250*C"]
+material = ["SPHC"]
+market_group = "QRSTU"
+market = ["上海"]
+mill = []
+
+[[strategies.hot_rolling.queries]]
+name = "热轧板卷_石家庄_Q235"
+product_name = []
+specification = ["2.5*1500*C"]
+material = ["Q235"]
+market_group = "QRSTU"
+market = ["石家庄"]
+mill = []
+
+[strategies.building_steel.defaults]
+execution_strategy = "building_steel"
+category = "钢材"
+subcategory = "建筑钢材"
+price_type = "市场价"
+price_scope = "按日期"
+publish_time = "全天价格"
+unit = "元/吨"
+
+[[strategies.building_steel.queries]]
+name = "钢筋焊接网_上海_HRB400_CRB600H"
+product_name = ["钢筋焊接网"]
+specification = ["Φ6", "Φ10"]
+material = ["HRB400", "CRB600H"]
+mesh_model = ["100*100"]
+market_group = "QRSTU"
+market = ["上海"]
+mill = ["上海"]
+
+[strategies.stainless_flat.defaults]
+execution_strategy = "stainless_flat"
+category = "镍铬不锈钢"
+second_nav = "不锈钢"
+third_nav = "不锈钢平板"
+price_type = "含税"
+price_scope = "按日期"
+publish_time = "晚盘价格"
+unit = "元/吨"
+
+[[strategies.stainless_flat.queries]]
+name = "冷轧不锈平板_佛山_3042B"
+product_name = ["冷轧不锈平板"]
+market = ["佛山"]
+material = ["304/2B"]
+specification = ["1*1219*3048", "1*1219*2438", "1*1000*2000"]
+brand = ["永旺"]
+mill = ["印尼永旺"]

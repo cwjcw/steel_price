@@ -3,22 +3,39 @@
 import argparse
 import json
 import random
+import tomllib
 import sys
 import time
+from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
+
 from DrissionPage import ChromiumOptions, ChromiumPage
+from scripts.strategies.registry import STRATEGIES
 
 ZH_PRODUCT = "\u54c1\u540d"
 ZH_SPEC = "\u89c4\u683c"
 ZH_MATERIAL = "\u6750\u8d28"
 ZH_MARKET = "\u5e02\u573a"
 ZH_MILL = "\u94a2\u5382"
+ZH_ENTERPRISE = "\u4f01\u4e1a"
+ZH_ORIGIN = "\u94a2\u5382/\u4ea7\u5730"
+ZH_BRAND = "\u54c1\u724c"
+ZH_MESH_MODEL = "\u7f51\u7247\u578b\u53f7"
+ZH_DIAMETER = "\u53e3\u5f84"
+ZH_PRICE_TYPE = "\u4ef7\u683c\u7c7b\u578b"
+ZH_CLASSIFICATION = "\u5206\u7c7b"
 ZH_FREQUENCY = "\u4ef7\u683c\u9891\u5ea6"
 ZH_BY_DATE = "\u6309\u65e5\u671f"
-ZH_LATE_PRICE = "\u665a\u76d8\u4ef7\u683c"
+ZH_ALL_DAY_PRICE = "\u5168\u5929\u4ef7\u683c"
 ZH_PUBLISH_TIME = "\u53d1\u5e03\u65f6\u95f4"
 ZH_DATE_RANGE = "\u65e5\u671f\u6bb5"
 ZH_START_TIME = "\u5f00\u59cb\u65f6\u95f4"
@@ -32,16 +49,90 @@ ZH_ACCOUNT_LOGIN = "\u8d26\u53f7\u767b\u5f55"
 ZH_GUIDE_CLOSE = "\u5173\u95ed\u5f15\u5bfc"
 ZH_SELECTED = "\u5df2\u9009"
 ZH_ONE_ROW = "1\u6761"
-ZH_COLD_COIL = "\u51b7\u5377"
 ZH_TAIAN = "\u6cf0\u5b89"
 ZH_QRSTU = "QRSTU"
 ZH_Q195 = "Q195"
 ZH_TAISHAN_STEEL = "\u6cf0\u5c71\u94a2\u94c1"
-ZH_EXPECTED_NAME = "Mysteel\u4ef7\u683c\u4e2d\u5fc3_\u51b7\u5377-1_1250_C-Q195-\u6cf0\u5b89-\u6cf0\u5c71\u94a2\u94c1_2026-03-26.xlsx"
+ZH_COLD_COIL = "\u51b7\u5377"
 
-TEST_USERNAME = "18559698081"
-TEST_PASSWORD = "123456cc"
+PRODUCT_FIELD_PROFILES: dict[str, dict[str, Any]] = {
+    "\u94a2\u7b4b\u710a\u63a5\u7f51": {
+        "product_label": ZH_PRODUCT,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ORIGIN, ZH_ENTERPRISE, ZH_MILL],
+        "price_type_label": ZH_PRICE_TYPE,
+        "extra_groups": {
+            "mesh_models": ZH_MESH_MODEL,
+        },
+        "expandable_groups": [],
+    },
+    "\u51b7\u8f67\u4e0d\u9508\u5e73\u677f": {
+        "product_label": ZH_PRODUCT,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ENTERPRISE, ZH_ORIGIN, ZH_MILL],
+        "price_type_label": ZH_CLASSIFICATION,
+        "extra_groups": {
+            "brands": ZH_BRAND,
+        },
+        "expandable_groups": [ZH_SPEC],
+    },
+    "\u70ed\u8f67\u677f\u5377": {
+        "product_label": ZH_PRODUCT,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ENTERPRISE, ZH_MILL, ZH_ORIGIN],
+        "price_type_label": ZH_PRICE_TYPE,
+        "extra_groups": {
+            "diameters": ZH_DIAMETER,
+        },
+        "expandable_groups": [ZH_ENTERPRISE],
+    },
+    "\u70ed\u8f67\u9178\u6d17\u677f\u5377": {
+        "product_label": ZH_PRODUCT,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ENTERPRISE, ZH_MILL, ZH_ORIGIN],
+        "price_type_label": ZH_PRICE_TYPE,
+        "extra_groups": {
+            "diameters": ZH_DIAMETER,
+        },
+        "expandable_groups": [ZH_ENTERPRISE],
+    },
+    "\u70ed\u8f67": {
+        "product_label": ZH_PRODUCT,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ENTERPRISE, ZH_MILL, ZH_ORIGIN],
+        "price_type_label": ZH_PRICE_TYPE,
+        "extra_groups": {
+            "diameters": ZH_DIAMETER,
+        },
+        "expandable_groups": [ZH_ENTERPRISE],
+    },
+}
+
+DEFAULT_FIELD_PROFILE: dict[str, Any] = {
+    "product_label": ZH_PRODUCT,
+    "spec_label": ZH_SPEC,
+    "material_label": ZH_MATERIAL,
+    "market_label": ZH_MARKET,
+    "mill_labels": [ZH_MILL, ZH_ENTERPRISE, ZH_ORIGIN],
+    "price_type_label": ZH_PRICE_TYPE,
+    "extra_groups": {},
+    "expandable_groups": [],
+}
+
 DEFAULT_URL = "https://price.mysteel.com/#/price-search?breedId=1-3"
+WORKDAY_API_TEMPLATE = "https://timor.tech/api/holiday/info/{date}"
+ENV_PATH = Path(".env")
+CONFIG_PATH = Path("queries.toml")
 CHROME_BINARY_CANDIDATES = [
     Path(r"C:\Users\KN426\AppData\Local\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
@@ -51,16 +142,110 @@ CHROME_BINARY_CANDIDATES = [
 
 @dataclass(frozen=True)
 class Query:
-    product_name: str = ZH_COLD_COIL
-    specification: str = "1*1250*C"
-    material: str = ZH_Q195
-    market_group: str = ZH_QRSTU
-    market: str = ZH_TAIAN
-    mill: str = ZH_TAISHAN_STEEL
-    price_scope: str = ZH_BY_DATE
-    publish_time: str = ZH_LATE_PRICE
-    target_date: str = "2026-03-25"
-    expected_filename: str = ZH_EXPECTED_NAME
+    name: str
+    execution_strategy: str
+    category: str
+    subcategory: str
+    second_nav: str
+    third_nav: str
+    price_type: str
+    product_names: list[str]
+    specifications: list[str]
+    materials: list[str]
+    market_group: str
+    markets: list[str]
+    mills: list[str]
+    brands: list[str]
+    mesh_models: list[str]
+    diameters: list[str]
+    price_scope: str
+    publish_time: str
+    start_date: str
+    end_date: str
+    unit: str
+
+
+def load_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        raise RuntimeError(f"Missing env file: {path}")
+
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def ensure_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None:
+        return []
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def first_product_key(query: Query) -> str:
+    return query.product_names[0] if query.product_names else ""
+
+
+def strategy_module(query: Query):
+    module = STRATEGIES.get(query.execution_strategy)
+    if not module:
+        raise RuntimeError(f"Unknown execution strategy: {query.execution_strategy}")
+    return module
+
+
+def profile_key_candidates(query: Query) -> list[str]:
+    candidates = [first_product_key(query), query.third_nav, query.subcategory]
+    return [item for item in candidates if item]
+
+
+def product_profile(query: Query) -> dict[str, Any]:
+    profile = dict(DEFAULT_FIELD_PROFILE)
+    try:
+        profile.update(strategy_module(query).field_profile(query))
+    except Exception:
+        pass
+    for key in profile_key_candidates(query):
+        specific = PRODUCT_FIELD_PROFILES.get(key, {})
+        if specific:
+            profile.update(specific)
+            break
+    return profile
+
+
+def reorder_queries_by_strategy(queries: list[Query]) -> list[Query]:
+    buckets: dict[str, deque[Query]] = defaultdict(deque)
+    strategy_order: list[str] = []
+    for query in queries:
+        if query.execution_strategy not in buckets:
+            strategy_order.append(query.execution_strategy)
+        buckets[query.execution_strategy].append(query)
+
+    ordered: list[Query] = []
+    last_strategy = ""
+    while buckets:
+        candidates = [name for name in strategy_order if name in buckets and name != last_strategy]
+        if not candidates:
+            candidates = [name for name in strategy_order if name in buckets]
+        chosen = max(candidates, key=lambda name: len(buckets[name]))
+        ordered.append(buckets[chosen].popleft())
+        last_strategy = chosen
+        if not buckets[chosen]:
+            del buckets[chosen]
+    return ordered
+
+
+def first_existing_form_item(page: ChromiumPage, label_texts: list[str], timeout: float = 4):
+    for label_text in label_texts:
+        item = form_item_by_label(page, label_text, timeout=timeout)
+        if item:
+            return item, label_text
+    return None, None
 
 
 def chrome_binary() -> str | None:
@@ -78,12 +263,65 @@ def default_target_date() -> str:
     return (date.today() - timedelta(days=1)).isoformat()
 
 
+def parse_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def parse_int(value: str | None, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return default
+
+
+def is_simple_workday(day_value: date) -> bool:
+    return day_value.weekday() < 5
+
+
+def is_workday_via_api(day_value: date) -> tuple[bool, str]:
+    url = WORKDAY_API_TEMPLATE.format(date=day_value.isoformat())
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except URLError as exc:
+        fallback = is_simple_workday(day_value)
+        return fallback, f"holiday API unavailable ({exc}); fallback weekday rule used"
+
+    if payload.get("code") != 0:
+        fallback = is_simple_workday(day_value)
+        return fallback, f"holiday API returned code={payload.get('code')}; fallback weekday rule used"
+
+    day_type = ((payload.get("type") or {}).get("type"))
+    day_name = ((payload.get("type") or {}).get("name")) or "unknown"
+    is_workday = day_type in (0, 3)
+    return is_workday, f"holiday API type={day_type} ({day_name})"
+
+
+def maybe_wait_random_start(enabled: bool, max_minutes: int) -> None:
+    if not enabled or max_minutes <= 0:
+        log_stage("Random startup delay disabled")
+        return
+    delay_seconds = random.uniform(0, max_minutes * 60)
+    log_stage(f"Random startup delay selected: {int(round(delay_seconds))} seconds")
+    time.sleep(delay_seconds)
+
+
+def prompt_manual_date_confirmation(start_date: str, end_date: str) -> None:
+    print()
+    print(f"Manual date input required: please set the page date range to {start_date} -> {end_date} in the browser.")
+    input("Press Enter after you finish setting the dates manually...")
+    print()
+
+
 def human_pause(low: float = 0.8, high: float = 1.6) -> None:
     time.sleep(random.uniform(low, high))
 
 
 def log_stage(stage: str) -> None:
-    print(f"[{datetime.now().strftime("%H:%M:%S")}] {stage}")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {stage}")
 
 
 def wait_until(page: ChromiumPage, condition_js: str, timeout: float = 10, interval: float = 0.25) -> bool:
@@ -125,6 +363,17 @@ def ensure_price_page(page: ChromiumPage, target_url: str) -> None:
         current_url = ""
     if "price-search" in current_url:
         return
+
+    try:
+        for tab in page.get_tabs():
+            tab_url = getattr(tab, "url", "") or ""
+            if "price-search" in tab_url:
+                page.activate_tab(getattr(tab, "tab_id", tab))
+                human_pause(0.8, 1.4)
+                return
+    except Exception:
+        pass
+
     page.get(target_url)
     page.wait.load_start()
     page.wait.doc_loaded()
@@ -133,7 +382,7 @@ def ensure_price_page(page: ChromiumPage, target_url: str) -> None:
 
 def dismiss_intro_guide(page: ChromiumPage) -> None:
     for locator in (
-        f'text={ZH_GUIDE_CLOSE}',
+        f"text={ZH_GUIDE_CLOSE}",
         f'xpath://button[contains(normalize-space(.),"{ZH_GUIDE_CLOSE}")]',
         f'xpath://div[contains(@class,"guide") or contains(@class,"driver")]//button[contains(normalize-space(.),"{ZH_GUIDE_CLOSE}")]',
     ):
@@ -143,6 +392,7 @@ def dismiss_intro_guide(page: ChromiumPage) -> None:
             ele = None
         if not ele:
             continue
+        log_stage("Intro guide detected; closing guide")
         try:
             ele.click(by_js=True)
         except Exception:
@@ -185,8 +435,10 @@ def input_value(ele, value: str) -> bool:
 
 def auto_login_if_needed(page: ChromiumPage, username: str, password: str, target_url: str) -> None:
     if not page_has_login_entry(page):
+        log_stage("Already logged in; skipping login step")
         return
 
+    log_stage("Login required; opening login modal")
     login_entry = page.ele('xpath://div[contains(@class,"login-bar")]//*[contains(normalize-space(.),"' + ZH_LOGIN + '")]', timeout=4)
     if not login_entry:
         return
@@ -223,15 +475,15 @@ def auto_login_if_needed(page: ChromiumPage, username: str, password: str, targe
         'xpath://div[contains(@class,"login-common")]//div[contains(@class,"form-content") and not(contains(@style,"display: none"))]//div[contains(@class,"form-content-password")]//input[@type="password"]',
         timeout=6,
     )
-    log_stage("Post-login timer started")
+    log_stage("Entering username")
     if not input_value(username_input, username):
         raise RuntimeError("Could not fill username")
-    log_stage("Running search")
+    log_stage("Entering password")
     if not input_value(password_input, password):
         raise RuntimeError("Could not fill password")
     human_pause(1.0, 1.8)
 
-    log_stage("Running search")
+    log_stage("Submitting login")
     login_button = page.ele(
         'xpath://div[contains(@class,"login-common")]//div[contains(@class,"form-button-login") and contains(normalize-space(.),"' + ZH_LOGIN + '")]',
         timeout=6,
@@ -253,8 +505,51 @@ def auto_login_if_needed(page: ChromiumPage, username: str, password: str, targe
         raise RuntimeError("Login did not complete in time")
 
     human_pause(2.0, 3.0)
-    log_stage("Switching to account-login tab?????")
+    log_stage("Login completed; returning to price-search page")
     ensure_price_page(page, target_url)
+
+
+def click_main_nav(page: ChromiumPage, label_text: str, timeout: float = 8) -> None:
+    if not label_text:
+        return
+    locators = [
+        f'xpath://div[contains(@class,"top") or contains(@class,"nav") or contains(@class,"menu")]//*[self::div or self::span or self::a][contains(normalize-space(.),"{label_text}")]',
+        f'text={label_text}',
+    ]
+    for locator in locators:
+        try:
+            ele = page.ele(locator, timeout=2)
+        except Exception:
+            ele = None
+        if ele:
+            ele.click(by_js=True)
+            human_pause(1.0, 1.8)
+            return
+    raise RuntimeError(f"Main navigation item not found: {label_text}")
+
+
+def visible_sub_navs(page: ChromiumPage):
+    return page.eles(
+        'xpath://div[contains(@class,"sub-nav__content") and not(ancestor::*[contains(@style,"display: none")])]',
+        timeout=4,
+    )
+
+
+def click_sub_nav(page: ChromiumPage, label_text: str, nav_index: int = 0, timeout: float = 8) -> None:
+    if not label_text:
+        return
+    navs = visible_sub_navs(page)
+    if len(navs) <= nav_index:
+        raise RuntimeError(f"Sub-navigation level {nav_index + 1} not found for: {label_text}")
+    nav = navs[nav_index]
+    item = nav.ele(
+        f'xpath:.//div[contains(@class,"row") and contains(normalize-space(.),"{label_text}")]',
+        timeout=timeout,
+    )
+    if not item:
+        raise RuntimeError(f"Sub-navigation option not found: {label_text}")
+    item.click(by_js=True)
+    human_pause(1.0, 1.8)
 
 
 def form_item_by_label(page: ChromiumPage, label_text: str, timeout: float = 8):
@@ -263,19 +558,83 @@ def form_item_by_label(page: ChromiumPage, label_text: str, timeout: float = 8):
         timeout=timeout,
     )
 
-
-def click_checkbox_in_group(page: ChromiumPage, group_label: str, option_label: str, timeout: float = 8) -> None:
+def maybe_expand_group(page: ChromiumPage, group_label: str, timeout: float = 4) -> bool:
     group = form_item_by_label(page, group_label, timeout=timeout)
     if not group:
-        raise RuntimeError(f"Checkbox group not found: {group_label}")
-    option = group.ele(
-        f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and contains(normalize-space(.),"{option_label}")]]',
-        timeout=timeout,
-    )
+        return False
+    try:
+        button = group.ele('xpath:.//button[contains(@class,"el-button--text")][.//*[contains(normalize-space(.),"\u66f4\u591a")]]', timeout=2)
+    except Exception:
+        button = None
+    if not button:
+        return False
+    button.click(by_js=True)
+    human_pause(0.8, 1.4)
+    return True
+
+
+def click_checkbox_in_group(page: ChromiumPage, group_label: str, option_label: str, timeout: float = 8, raise_if_missing: bool = True) -> bool:
+    group = form_item_by_label(page, group_label, timeout=timeout)
+    if not group:
+        if raise_if_missing:
+            raise RuntimeError(f"Checkbox group not found: {group_label}")
+        return False
+
+    locator = f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and contains(normalize-space(.),"{option_label}")]]'
+    try:
+        option = group.ele(locator, timeout=2)
+    except Exception:
+        option = None
     if not option:
-        raise RuntimeError(f"Checkbox option not found: {group_label} -> {option_label}")
+        maybe_expand_group(page, group_label, timeout=2)
+        group = form_item_by_label(page, group_label, timeout=timeout)
+        try:
+            option = group.ele(locator, timeout=2) if group else None
+        except Exception:
+            option = None
+    if not option:
+        if raise_if_missing:
+            raise RuntimeError(f"Checkbox option not found: {group_label} -> {option_label}")
+        return False
     option.click(by_js=True)
     human_pause(0.9, 1.6)
+    return True
+
+
+def click_checkbox_in_any_group(page: ChromiumPage, group_labels: list[str], option_label: str, timeout: float = 8) -> None:
+    last_error = None
+    for label in group_labels:
+        if not label:
+            continue
+        try:
+            click_checkbox_in_group(page, label, option_label, timeout=timeout)
+            return
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError(str(last_error) if last_error else f"Checkbox option not found: {option_label}")
+
+
+def click_option_in_group(page: ChromiumPage, group_labels: list[str], option_label: str, timeout: float = 8) -> None:
+    group, found_label = first_existing_form_item(page, group_labels, timeout=timeout)
+    if not group:
+        raise RuntimeError(f"Group not found: {'/'.join(group_labels)}")
+
+    locators = [
+        f'xpath:.//label[contains(@class,"el-radio-button")][.//span[contains(normalize-space(.),"{option_label}")]]',
+        f'xpath:.//label[contains(@class,"el-radio")][.//span[contains(normalize-space(.),"{option_label}")]]',
+        f'xpath:.//button[.//span[contains(normalize-space(.),"{option_label}")]]',
+        f'xpath:.//*[contains(@class,"el-segmented") or contains(@class,"button") or contains(@class,"tab")][contains(normalize-space(.),"{option_label}")]',
+    ]
+    for locator in locators:
+        try:
+            option = group.ele(locator, timeout=2)
+        except Exception:
+            option = None
+        if option:
+            option.click(by_js=True)
+            human_pause(0.9, 1.6)
+            return
+    raise RuntimeError(f"Group option not found: {found_label} -> {option_label}")
 
 
 def click_radio_button_in_group(page: ChromiumPage, group_label: str, option_label: str, timeout: float = 8) -> None:
@@ -366,9 +725,9 @@ def click_publish_type(page: ChromiumPage, label_text: str, timeout: float = 8) 
     human_pause(0.9, 1.6)
 
 
-def set_date_via_picker(page: ChromiumPage, target_date: str, timeout: float = 10) -> None:
-    target = datetime.strptime(target_date, "%Y-%m-%d").date()
-    day = str(target.day)
+def set_date_via_picker(page: ChromiumPage, start_date: str, end_date: str, timeout: float = 10) -> None:
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
 
     editor = page.ele(
         f'xpath://div[contains(@class,"el-form-item")][.//label[contains(normalize-space(.),"{ZH_PUBLISH_TIME}")]]//div[contains(@class,"el-date-editor--daterange") and .//input[@placeholder="{ZH_START_TIME}"] and .//input[@placeholder="{ZH_END_TIME}"]]',
@@ -377,20 +736,35 @@ def set_date_via_picker(page: ChromiumPage, target_date: str, timeout: float = 1
     if not editor:
         raise RuntimeError("Date-range editor not found")
     editor.click(by_js=True)
-    human_pause(0.6, 1.0)
+    human_pause(0.8, 1.4)
 
-    day_locator = (
-        'xpath://div[contains(@class,"el-picker-panel") and not(contains(@style,"display: none"))]'
-        f'//td[contains(@class,"available") and not(contains(@class,"disabled"))]//span[normalize-space(text())="{day}"]'
-    )
-    day_eles = page.eles(day_locator, timeout=4)
-    if not day_eles:
-        raise RuntimeError(f"Could not find selectable date cell for day {day}")
+    def click_day(day_value: int) -> None:
+        locator = (
+            'xpath://div[contains(@class,"el-picker-panel") and not(contains(@style,"display: none"))]'
+            f'//td[contains(@class,"available") and not(contains(@class,"disabled"))]//span[normalize-space(text())="{day_value}"]'
+        )
+        elements = page.eles(locator, timeout=4)
+        if not elements:
+            raise RuntimeError(f"Could not find selectable date cell for day {day_value}")
+        elements[0].click(by_js=True)
+        human_pause(0.3, 0.7)
 
-    day_eles[0].click(by_js=True)
-    human_pause(0.2, 0.4)
-    day_eles[0].click(by_js=True)
-    human_pause(0.6, 1.0)
+    click_day(start.day)
+    click_day(end.day)
+    human_pause(0.8, 1.4)
+
+
+def set_date_range(page: ChromiumPage, start_date: str, end_date: str, manual_date: bool = False) -> None:
+    if manual_date:
+        log_stage("Manual date mode enabled; waiting for browser-side date input")
+        prompt_manual_date_confirmation(start_date, end_date)
+        return
+
+    try:
+        set_date_via_picker(page, start_date, end_date)
+    except Exception as exc:
+        log_stage(f"Automatic date selection failed ({exc}); switching to manual date input")
+        prompt_manual_date_confirmation(start_date, end_date)
 
 
 def click_search(page: ChromiumPage) -> None:
@@ -405,17 +779,30 @@ def click_search(page: ChromiumPage) -> None:
 
 
 def wait_for_result_row(page: ChromiumPage, query: Query, timeout: float = 15):
+    conditions: list[str] = []
+
+    def add_conditions(values: list[str]) -> None:
+        if values:
+            predicate = " or ".join([f'.//td[contains(normalize-space(.),"{item}")]' for item in values])
+            conditions.append(f'( {predicate} )')
+
+    add_conditions(query.product_names)
+    add_conditions(query.specifications)
+    add_conditions(query.materials)
+    add_conditions(query.markets)
+    add_conditions(query.mills)
+    add_conditions(query.brands)
+    add_conditions(query.mesh_models)
+    add_conditions(query.diameters)
+
+    where_clause = " and ".join(conditions) if conditions else 'true()'
     row_locator = (
         'xpath://table[contains(@class,"el-table__body")]//tr[contains(@class,"el-table__row")]'
-        f'[.//td[contains(normalize-space(.),"{query.product_name}")]'
-        f' and .//td[contains(normalize-space(.),"{query.specification}")]'
-        f' and .//td[contains(normalize-space(.),"{query.material}")]'
-        f' and .//td[contains(normalize-space(.),"{query.market}")]'
-        f' and .//td[contains(normalize-space(.),"{query.mill}")]]'
+        f'[{where_clause}]'
     )
     row = page.ele(row_locator, timeout=timeout)
     if not row:
-        raise RuntimeError("Matching result row not found")
+        raise RuntimeError(f"Matching result row not found for query: {query.name}")
     return row
 
 
@@ -484,7 +871,7 @@ def confirm_export_dialog(page: ChromiumPage) -> None:
     human_pause(0.8, 1.2)
 
 
-def wait_for_download(page: ChromiumPage, download_dir: Path, timeout: int = 60) -> Path:
+def wait_for_download(page: ChromiumPage, download_dir: Path, started_after: float, timeout: int = 60) -> Path:
     try:
         page.wait.downloads_done(timeout=timeout)
     except Exception:
@@ -494,109 +881,281 @@ def wait_for_download(page: ChromiumPage, download_dir: Path, timeout: int = 60)
     while time.time() < end:
         latest = latest_file(download_dir, "*.xlsx")
         partials = list(download_dir.glob("*.crdownload")) + list(download_dir.glob("*.tmp"))
-        if latest and not partials:
+        if latest and latest.stat().st_mtime >= started_after and not partials:
             return latest
         time.sleep(1)
     raise TimeoutError("Timed out waiting for Excel download")
 
 
-def apply_filters(page: ChromiumPage, query: Query) -> None:
-    log_stage("Post-login timer started?")
+def apply_filters(page: ChromiumPage, query: Query, manual_date: bool = False) -> None:
+    log_stage(f"Applying filters for query: {query.name} (category: {query.category})")
     ensure_price_page(page, DEFAULT_URL)
-    page.wait.ele_displayed(f'text={ZH_SPEC}', timeout=20)
+    page.wait.ele_displayed(f"text={ZH_SEARCH}", timeout=20)
     human_pause(1.0, 1.8)
     dismiss_intro_guide(page)
 
-    log_stage(f"Running search: {query.product_name}")
-    click_checkbox_in_group(page, ZH_PRODUCT, query.product_name)
-    log_stage(f"Running search: {query.specification}")
-    click_checkbox_in_group(page, ZH_SPEC, query.specification)
-    log_stage(f"Running search: {query.material}")
-    click_checkbox_in_group(page, ZH_MATERIAL, query.material)
+    module = strategy_module(query)
+    log_stage(f"Using execution strategy: {query.execution_strategy}")
+    module.apply_navigation(
+        page,
+        query,
+        {
+            "click_main_nav": click_main_nav,
+            "click_sub_nav": click_sub_nav,
+        },
+    )
 
-    log_stage(f"Post-login timer started?: {query.market_group}")
-    pane_id = click_market_tab(page, query.market_group)
-    log_stage(f"Running search: {query.market}")
-    click_market_option(page, pane_id, query.market)
-    log_stage(f"Running search: {query.mill}")
-    click_checkbox_in_group(page, ZH_MILL, query.mill)
-    log_stage(f"Post-login timer started?: {query.price_scope}")
-    click_radio_button_in_group(page, ZH_FREQUENCY, query.price_scope)
-    log_stage(f"Switching to account-login tab?: {ZH_DATE_RANGE}")
+    profile = product_profile(query)
+
+    if query.price_type:
+        log_stage(f"Selecting price type/classification: {query.price_type}")
+        try:
+            click_option_in_group(page, [profile.get("price_type_label", ZH_PRICE_TYPE), ZH_CLASSIFICATION, ZH_PRICE_TYPE], query.price_type)
+        except RuntimeError as exc:
+            if "Group not found" in str(exc):
+                log_stage(f"Price type group not present; skipping: {query.price_type}")
+            else:
+                raise
+
+    for item in query.product_names:
+        log_stage(f"Selecting product: {item}")
+        click_checkbox_in_group(page, profile.get("product_label", ZH_PRODUCT), item)
+    for item in query.specifications:
+        log_stage(f"Selecting specification: {item}")
+        click_checkbox_in_group(page, profile.get("spec_label", ZH_SPEC), item)
+    for item in query.materials:
+        log_stage(f"Selecting material: {item}")
+        click_checkbox_in_group(page, profile.get("material_label", ZH_MATERIAL), item)
+
+    for item in query.mesh_models:
+        log_stage(f"Selecting mesh model: {item}")
+        click_checkbox_in_group(page, profile.get("extra_groups", {}).get("mesh_models", ZH_MESH_MODEL), item)
+    for item in query.brands:
+        log_stage(f"Selecting brand: {item}")
+        click_checkbox_in_group(page, profile.get("extra_groups", {}).get("brands", ZH_BRAND), item)
+    for item in query.diameters:
+        log_stage(f"Selecting diameter: {item}")
+        click_checkbox_in_group(page, profile.get("extra_groups", {}).get("diameters", ZH_DIAMETER), item, raise_if_missing=False)
+
+    pane_id = ""
+    if query.market_group and query.markets:
+        log_stage(f"Selecting market group: {query.market_group}")
+        pane_id = click_market_tab(page, query.market_group)
+    for item in query.markets:
+        log_stage(f"Selecting market: {item}")
+        click_market_option(page, pane_id, item)
+    for item in query.mills:
+        log_stage(f"Selecting mill/origin: {item}")
+        click_checkbox_in_any_group(page, profile.get("mill_labels", [ZH_MILL]), item)
+    if query.price_scope:
+        log_stage(f"Selecting frequency: {query.price_scope}")
+        click_radio_button_in_group(page, ZH_FREQUENCY, query.price_scope)
+    log_stage(f"Selecting publish mode: {ZH_DATE_RANGE}")
     click_radio_in_group(page, ZH_PUBLISH_TIME, ZH_DATE_RANGE)
-    log_stage(f"Post-login timer started?: {query.publish_time}")
-    click_publish_type(page, query.publish_time)
-    log_stage(f"Running search: {query.target_date}")
-    set_date_via_picker(page, query.target_date)
+    if query.publish_time:
+        log_stage(f"Selecting publish time: {query.publish_time}")
+        click_publish_type(page, query.publish_time)
+    log_stage(f"Selecting date range: {query.start_date} -> {query.end_date}")
+    set_date_range(page, query.start_date, query.end_date, manual_date=manual_date)
     log_stage("Running search")
     click_search(page)
+    log_stage("Filters submitted; waiting for results")
 
 
-def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path:
-    log_stage("Switching to account-login tab?")
+def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path | None:
+    log_stage("Waiting for result row")
     wait_for_result_row(page, query, timeout=20)
-    log_stage("Post-login timer started?")
+    log_stage("Selecting result row")
     select_search_result(page, query)
-    log_stage("Running searchExcel")
+    log_stage("Clicking Export Excel")
     click_export_excel_button(page)
-    log_stage("Post-login timer started?")
+    log_stage("Confirming export dialog")
+    before_latest = latest_file(download_dir, "*.xlsx")
     confirm_export_dialog(page)
-    return wait_for_download(page, download_dir, timeout=90)
+    log_stage("Export confirmed; skipping strict download wait")
+    human_pause(2.0, 3.5)
+
+    after_latest = latest_file(download_dir, "*.xlsx")
+    if after_latest and (not before_latest or after_latest != before_latest or after_latest.stat().st_mtime >= time.time() - 120):
+        log_stage(f"Latest downloaded file detected: {after_latest.name}")
+        return after_latest
+
+    log_stage("No downloadable file detected yet; continuing without download verification")
+    return after_latest
 
 
-def build_result(query: Query, page: ChromiumPage, downloaded_file: Path, output_dir: Path, elapsed_seconds: float) -> Path:
+def build_result(query: Query, page: ChromiumPage, downloaded_file: Path | None, output_dir: Path, elapsed_seconds: float) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "query": asdict(query),
         "current_url": page.url,
-        "downloaded_file": str(downloaded_file),
-        "downloaded_name": downloaded_file.name,
-        "expected_filename": query.expected_filename,
-        "filename_matches_expected": downloaded_file.name == query.expected_filename,
+        "downloaded_file": str(downloaded_file) if downloaded_file else "",
+        "downloaded_name": downloaded_file.name if downloaded_file else "",
         "captured_at": datetime.now().isoformat(timespec="seconds"),
         "elapsed_seconds": round(elapsed_seconds, 2),
         "elapsed_readable": str(timedelta(seconds=round(elapsed_seconds))),
     }
-    result_path = output_dir / f"mysteel_export_{timestamp()}.json"
+    result_path = output_dir / f"mysteel_export_{query.name}_{timestamp()}.json"
     result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return result_path
+
+
+def reset_filters(page: ChromiumPage) -> None:
+    ensure_price_page(page, DEFAULT_URL)
+    dismiss_intro_guide(page)
+
+
+def load_queries(config_path: Path, fallback_date: str) -> list[Query]:
+    if not config_path.exists():
+        raise RuntimeError(f"Missing query config file: {config_path}")
+
+    if config_path.suffix.lower() == ".toml":
+        with config_path.open("rb") as fh:
+            payload = tomllib.load(fh)
+    else:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    shared = payload.get("shared", {})
+    queries: list[Query] = []
+
+    shared_start = str(shared.get("start_date") or fallback_date)
+    shared_end = str(shared.get("end_date") or shared_start)
+
+    def build_query(item: dict[str, Any], defaults: dict[str, Any], strategy_name: str, idx: int) -> Query:
+        merged = dict(defaults)
+        merged.update(item)
+        name = str(merged.get("name") or f"{strategy_name}_{idx}")
+        return Query(
+            name=name,
+            execution_strategy=str(merged.get("execution_strategy") or strategy_name),
+            category=str(merged.get("category") or ""),
+            subcategory=str(merged.get("subcategory") or ""),
+            second_nav=str(merged.get("second_nav") or ""),
+            third_nav=str(merged.get("third_nav") or ""),
+            price_type=str(merged.get("price_type") or ""),
+            product_names=ensure_list(merged.get("product_name") or merged.get("product_names")),
+            specifications=ensure_list(merged.get("specification") or merged.get("specifications")),
+            materials=ensure_list(merged.get("material") or merged.get("materials")),
+            market_group=str(merged.get("market_group") or ""),
+            markets=ensure_list(merged.get("market") or merged.get("markets")),
+            mills=ensure_list(merged.get("mill") or merged.get("mills")),
+            brands=ensure_list(merged.get("brand") or merged.get("brands")),
+            mesh_models=ensure_list(merged.get("mesh_model") or merged.get("mesh_models")),
+            diameters=ensure_list(merged.get("diameter") or merged.get("diameters")),
+            price_scope=str(merged.get("price_scope") or ""),
+            publish_time=str(merged.get("publish_time") or ""),
+            start_date=str(merged.get("start_date") or shared_start),
+            end_date=str(merged.get("end_date") or shared_end),
+            unit=str(merged.get("unit") or ""),
+        )
+
+    strategy_groups = payload.get("strategies") or {}
+    if strategy_groups:
+        for strategy_name, strategy_payload in strategy_groups.items():
+            if not isinstance(strategy_payload, dict):
+                continue
+            defaults = dict(strategy_payload.get("defaults") or {})
+            defaults.setdefault("execution_strategy", strategy_name)
+            items = strategy_payload.get("queries") or strategy_payload.get("items") or []
+            for idx, item in enumerate(items, start=1):
+                if not isinstance(item, dict):
+                    continue
+                queries.append(build_query(item, defaults, str(strategy_name), idx))
+    else:
+        category_groups = payload.get("categories") or {}
+        for category_name, category_payload in category_groups.items():
+            if not isinstance(category_payload, dict):
+                continue
+            defaults = dict(category_payload.get("defaults") or {})
+            defaults.setdefault("category", category_name)
+            defaults.setdefault("execution_strategy", defaults.get("execution_strategy") or "cold_rolling")
+            items = category_payload.get("queries") or category_payload.get("items") or []
+            for idx, item in enumerate(items, start=1):
+                if not isinstance(item, dict):
+                    continue
+                queries.append(build_query(item, defaults, str(defaults["execution_strategy"]), idx))
+
+    if not queries:
+        raise RuntimeError("No queries found in config file")
+    return reorder_queries_by_strategy(queries)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Mysteel Excel export automation")
     parser.add_argument("--url", default=DEFAULT_URL)
+    parser.add_argument("--config", default=str(CONFIG_PATH))
     parser.add_argument("--user-data-dir", default="Mysteel_Browser_Data")
-    parser.add_argument("--download-dir", default="data")
+    parser.add_argument("--download-dir", default=None)
     parser.add_argument("--output-dir", default="output")
     parser.add_argument("--target-date", default=default_target_date())
+    parser.add_argument("--strategy", default="", help="Run only one execution strategy, for example: cold_rolling")
+    parser.add_argument("--manual-date", action="store_true")
+    parser.add_argument("--force-run-non-workday", action="store_true")
     args = parser.parse_args()
 
-    query = Query(target_date=args.target_date)
-    download_dir = Path(args.download_dir)
+    env = load_env_file(ENV_PATH)
+    username = env.get("MYSTEEL_USERNAME", "")
+    password = env.get("MYSTEEL_PASSWORD", "")
+    download_dir_str = args.download_dir or env.get("MYSTEEL_DOWNLOAD_DIR", "data")
+    manual_date = args.manual_date or parse_bool(env.get("MYSTEEL_MANUAL_DATE"), default=False)
+    force_run_non_workday = args.force_run_non_workday or parse_bool(env.get("MYSTEEL_FORCE_RUN_NON_WORKDAY"), default=False)
+    random_start_enabled = parse_bool(env.get("MYSTEEL_RANDOM_START_ENABLED"), default=True)
+    random_start_max_minutes = parse_int(env.get("MYSTEEL_RANDOM_START_MAX_MINUTES"), default=15)
+    if not username or not password:
+        raise RuntimeError("MYSTEEL_USERNAME or MYSTEEL_PASSWORD is missing in .env")
+
+    today = date.today()
+    is_workday, workday_reason = is_workday_via_api(today)
+    log_stage(f"Workday check: {workday_reason}")
+    if not force_run_non_workday and not is_workday:
+        log_stage(f"Today is not a workday ({today.isoformat()}); skipping run")
+        return 0
+
+    maybe_wait_random_start(random_start_enabled, random_start_max_minutes)
+
+    queries = load_queries(Path(args.config), args.target_date)
+    if args.strategy:
+        queries = [query for query in queries if query.execution_strategy == args.strategy]
+        if not queries:
+            raise RuntimeError(f"No queries found for strategy: {args.strategy}")
+        log_stage(f"Strategy filter applied: {args.strategy} ({len(queries)} query/queries)")
+    download_dir = Path(download_dir_str)
     output_dir = Path(args.output_dir)
     page = create_page(Path(args.user_data_dir), download_dir)
+    summaries: list[dict[str, Any]] = []
 
     try:
-        log_stage("Switching to account-login tab?")
+        log_stage("Opening price-search page")
         page.get(args.url)
         page.wait.load_start()
         page.wait.doc_loaded()
         human_pause(1.0, 1.8)
-        auto_login_if_needed(page, TEST_USERNAME, TEST_PASSWORD, args.url)
+        auto_login_if_needed(page, username, password, args.url)
         dismiss_intro_guide(page)
-        log_stage("Post-login timer started")
-        started_at = time.perf_counter()
-        apply_filters(page, query)
-        downloaded = export_excel(page, query, download_dir)
-        elapsed_seconds = time.perf_counter() - started_at
-        result_path = build_result(query, page, downloaded, output_dir, elapsed_seconds)
-        print(json.dumps({
-            "downloaded_file": str(downloaded),
-            "downloaded_name": downloaded.name,
-            "result_file": str(result_path),
-            "elapsed_seconds": round(elapsed_seconds, 2),
-            "elapsed_readable": str(timedelta(seconds=round(elapsed_seconds))),
-        }, ensure_ascii=False, indent=2))
+
+        for query in queries:
+            log_stage(f"Starting query: {query.name}")
+            started_at = time.perf_counter()
+            apply_filters(page, query, manual_date=manual_date)
+            downloaded = export_excel(page, query, download_dir)
+            elapsed_seconds = time.perf_counter() - started_at
+            result_path = build_result(query, page, downloaded, output_dir, elapsed_seconds)
+            summaries.append({
+                "query": query.name,
+                "downloaded_file": str(downloaded) if downloaded else "",
+                "downloaded_name": downloaded.name if downloaded else "",
+                "result_file": str(result_path),
+                "elapsed_seconds": round(elapsed_seconds, 2),
+                "elapsed_readable": str(timedelta(seconds=round(elapsed_seconds))),
+            })
+            log_stage(f"Completed query: {query.name}")
+            if query != queries[-1]:
+                reset_filters(page)
+                page.get(args.url)
+                page.wait.load_start()
+                page.wait.doc_loaded()
+                human_pause(1.0, 1.8)
+
+        print(json.dumps(summaries, ensure_ascii=False, indent=2))
         return 0
     finally:
         print("Browser left open for inspection.")
