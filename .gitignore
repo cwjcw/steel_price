@@ -211,6 +211,8 @@ __marimo__/
 data/
 *.xlsx
 Mysteel_Browser_Data/
+.browser-profile/
 data/
 output/
+test/
 .env
