@@ -1,4 +1,4 @@
-﻿﻿# steel_price
+﻿# steel_price
 
 用于自动登录 Mysteel 价格中心，按配置执行筛选、查询、勾选结果并导出 Excel。
 
@@ -15,6 +15,7 @@
 
 - Excel 导出文件：`data/`
 - 每次运行的结果摘要：`output/`
+- 汇总结果文件：`data/Total_Price.xlsx`
 
 部署相关文档：
 
@@ -43,14 +44,19 @@
 steel_price/
 |- README.md
 |- WINDOWS_SETUP.md
+|- UBUNTU_SETUP.md
 |- pyproject.toml
 |- uv.lock
 |- queries.toml
 |- .env.example
 |- .gitattributes
 |- .gitignore
+|- sitecustomize.py
 |- scripts/
 |  |- mysteel_export_excel.py
+|  |- build_total_price.py
+|  |- send_wechat_files.py
+|  |- run_daily_pipeline.py
 |  `- strategies/
 |     |- __init__.py
 |     |- registry.py
@@ -66,6 +72,7 @@ steel_price/
 
 - `data/`、`output/`、`.uv-cache/`、`Mysteel_Browser_Data/`、`.browser-profile/` 都属于本地运行产物，不建议纳入版本库同步。
 - `.env` 是本地私有配置，不建议提交。
+- `sitecustomize.py` 会在 Python 启动时自动读取 `.env`，并根据 `BASIC_CODE_ROOT` 把 `basic_code` 仓库加入 `sys.path`。
 
 ## 主脚本和策略脚本的区别
 
@@ -79,6 +86,7 @@ steel_price/
 - 读取 `queries.toml`
 - 解析命令行参数
 - 判断工作日
+- 清理旧导出文件
 - 启动浏览器
 - 自动登录 Mysteel
 - 根据 `execution_strategy` 调用策略模块
@@ -199,27 +207,39 @@ steel_price/
 
 ## `.env` 变量说明
 
-主脚本当前会读取以下环境变量：
+主脚本和附属脚本当前会读取以下环境变量：
 
 - `MYSTEEL_USERNAME`
 - `MYSTEEL_PASSWORD`
 - `MYSTEEL_DOWNLOAD_DIR`
+- `MYSTEEL_CLEAR_DOWNLOAD_DIR`
 - `MYSTEEL_CHROME_PATH`
 - `MYSTEEL_MANUAL_DATE`
 - `MYSTEEL_FORCE_RUN_NON_WORKDAY`
 - `MYSTEEL_RANDOM_START_ENABLED`
 - `MYSTEEL_RANDOM_START_MAX_MINUTES`
+- `BASIC_CODE_ROOT`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WX_ROBOT_WEBHOOK`
+- `WECHAT_TOUSERS`
+- `WECHAT_DEFAULT_FILE`
 
 其中：
 
 - `MYSTEEL_USERNAME`、`MYSTEEL_PASSWORD` 必填
+- `MYSTEEL_CLEAR_DOWNLOAD_DIR` 控制导出前是否清空 `data/` 里的旧 Excel
 - `MYSTEEL_CHROME_PATH` 用于显式指定 Chrome 或 Chromium 可执行文件路径
 - 如果 `MYSTEEL_CHROME_PATH` 为空，脚本会回退到内置的常见 Windows 路径自动探测
+- `BASIC_CODE_ROOT` 用于把 `basic_code` 仓库加入 Python 导入路径
+- `WX_*` 和 `WECHAT_*` 用于企业微信文件发送
 
 建议做法：
 
 - 使用 `.env.example` 作为模板创建本地 `.env`
 - 不要把真实账号密码提交进版本库
+- 只要 `.env` 中配置了 `BASIC_CODE_ROOT`，所有脚本都可以直接 `import basic_code` 里的模块，不需要额外维护专门的导入桥接脚本
 
 ## 运行方式
 
@@ -255,6 +275,87 @@ uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
 uv run python .\scripts\mysteel_export_excel.py
+```
+
+### 生成汇总表
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\build_total_price.py
+```
+
+这个脚本会读取当天的导出结果摘要，并把数据整理成固定文件：
+
+- `data/Total_Price.xlsx`
+
+输出字段固定为：
+
+- `记录ID`
+- `类型`
+- `一级品类`
+- `二级品类`
+- `品名`
+- `规格`
+- `材质`
+- `市场`
+- `品牌`
+- `企业/钢厂`
+- `价格`
+- `发布时间`
+- `日期`
+
+汇总规则说明：
+
+- `记录ID` 会按关键字段生成稳定 ID，适合后续写入数据库
+- `价格` 以数值格式写入，单元格显示格式为 `0.00`
+- `日期` 以日期单元格写入，单元格显示格式为 `yyyy-mm-dd`
+- 脚本会保留 `Total_Price.xlsx` 里已有的数据，只在末尾追加新的记录
+- 同一条记录再次运行时不会重复追加
+- 旧版没有 `记录ID` 或没有 `价格` 列的汇总表，脚本会在下次运行时自动升级兼容
+
+### 发送企业微信文件
+
+先在 `.env` 中配置：
+
+- `BASIC_CODE_ROOT`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WECHAT_TOUSERS`
+- `WECHAT_DEFAULT_FILE`
+
+然后执行：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\send_wechat_files.py
+```
+
+如果需要临时指定文件：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\send_wechat_files.py --file .\data\Total_Price.xlsx
+```
+
+### 一键执行导出、汇总、发送
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\run_daily_pipeline.py
+```
+
+执行顺序为：
+
+1. 导出 Mysteel Excel
+2. 生成 `Total_Price.xlsx`
+3. 发送企业微信文件
+
+如果当天只想导出并汇总，不发送微信：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\run_daily_pipeline.py --skip-send
 ```
 
 ### Ubuntu / Linux 运行示例
@@ -305,8 +406,9 @@ uv run python .\scripts\mysteel_export_excel.py --force-run-non-workday
 这份 README 已按当前代码行为校对，重点确认过以下内容：
 
 - 已支持的策略列表与 `scripts/strategies/registry.py` 一致
-- `.env` 变量列表与主脚本读取逻辑一致
+- `.env` 变量列表与主脚本和附属脚本读取逻辑一致
 - `MYSTEEL_CHROME_PATH` 已在主脚本中生效
+- `BASIC_CODE_ROOT` 已通过 `sitecustomize.py` 全局接入 Python 导入路径
 - `stainless_flat` 的导航层级和字段说明与当前实现一致
 - 运行命令与当前 `uv + python` 执行方式一致
 
@@ -352,7 +454,17 @@ holiday API unavailable ... fallback weekday rule used
 - 日期范围是否正确
 - 查询条件是否过窄
 
-### 5. 新增品类怎么扩展
+### 5. 企业微信发送时报 `Unable to import wechat.py`
+
+说明当前 Python 进程没有找到 `basic_code` 仓库。
+
+优先检查：
+
+- `.env` 中是否已设置 `BASIC_CODE_ROOT`
+- `BASIC_CODE_ROOT` 指向的目录是否真实存在
+- 目标目录里是否有 `wechat.py`
+
+### 6. 新增品类怎么扩展
 
 建议按这个顺序做：
 

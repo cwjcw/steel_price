@@ -24,6 +24,7 @@
 - `uv.lock`
 - `queries.toml`
 - `.env.example`
+- `sitecustomize.py`
 - `scripts/`
 
 不建议复制的本地运行产物：
@@ -95,12 +96,26 @@ MYSTEEL_CHROME_PATH=/usr/bin/google-chrome
 MYSTEEL_USERNAME=your_mysteel_username
 MYSTEEL_PASSWORD=your_mysteel_password
 MYSTEEL_DOWNLOAD_DIR=/home/your_user/code/steel_price/data
+MYSTEEL_CLEAR_DOWNLOAD_DIR=true
 MYSTEEL_CHROME_PATH=/usr/bin/google-chrome
 MYSTEEL_MANUAL_DATE=false
 MYSTEEL_FORCE_RUN_NON_WORKDAY=false
 MYSTEEL_RANDOM_START_ENABLED=false
 MYSTEEL_RANDOM_START_MAX_MINUTES=15
+BASIC_CODE_ROOT=/path/to/basic_code
+WX_CORP_ID=your_corp_id
+WX_AGENT_ID=your_agent_id
+WX_SECRET=your_secret
+WX_ROBOT_WEBHOOK=
+WECHAT_TOUSERS=user_a|user_b
+WECHAT_DEFAULT_FILE=/path/to/steel_price/data/Total_Price.xlsx
 ```
+
+说明：
+
+- `BASIC_CODE_ROOT` 指向 `basic_code` 仓库根目录即可
+- `sitecustomize.py` 会在 Python 启动时自动读取 `.env`，并把 `BASIC_CODE_ROOT` 加入 `sys.path`
+- 因此所有脚本都可以直接 `import basic_code` 里的模块，不需要额外维护专门的导入桥接脚本
 
 ## 5. 安装依赖
 
@@ -146,7 +161,48 @@ export UV_CACHE_DIR="$PWD/.uv-cache"
 uv run python ./scripts/mysteel_export_excel.py
 ```
 
-## 9. Linux / Ubuntu 特别注意事项
+## 9. 汇总与企业微信发送
+
+### 生成汇总表
+
+```bash
+export UV_CACHE_DIR="$PWD/.uv-cache"
+uv run python ./scripts/build_total_price.py
+```
+
+### 发送企业微信文件
+
+请先在 `.env` 里配置：
+
+- `BASIC_CODE_ROOT`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WECHAT_TOUSERS`
+- `WECHAT_DEFAULT_FILE`
+
+执行：
+
+```bash
+export UV_CACHE_DIR="$PWD/.uv-cache"
+uv run python ./scripts/send_wechat_files.py
+```
+
+### 一键执行全流程
+
+```bash
+export UV_CACHE_DIR="$PWD/.uv-cache"
+uv run python ./scripts/run_daily_pipeline.py
+```
+
+如果当天只想导出和汇总，不发送企业微信：
+
+```bash
+export UV_CACHE_DIR="$PWD/.uv-cache"
+uv run python ./scripts/run_daily_pipeline.py --skip-send
+```
+
+## 10. Linux / Ubuntu 特别注意事项
 
 ### 真实浏览器环境
 
@@ -180,7 +236,7 @@ uv run python ./scripts/mysteel_export_excel.py
 - `MYSTEEL_CHROME_PATH` 正确
 - 任务运行时浏览器有可用显示环境
 
-## 10. 常见问题
+## 11. 常见问题
 
 ### 1. 找不到 Chrome 路径
 
@@ -209,3 +265,11 @@ which chromium
 - 是否还没到 Mysteel 当次更新时间
 - 日期范围是否正确
 - 查询条件是否过于严格
+
+### 4. 企业微信发送时报 `Unable to import wechat.py`
+
+优先检查：
+
+- `.env` 中是否已设置 `BASIC_CODE_ROOT`
+- `BASIC_CODE_ROOT` 指向的目录是否真实存在
+- 目标目录里是否有 `wechat.py`

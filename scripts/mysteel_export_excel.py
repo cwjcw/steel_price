@@ -393,6 +393,23 @@ def latest_file(directory: Path, pattern: str) -> Path | None:
     return files[0] if files else None
 
 
+def clear_download_dir(download_dir: Path) -> int:
+    removed = 0
+    patterns = ("*.xlsx", "*.xls", "~$*.xlsx", "~$*.xls")
+    seen: set[Path] = set()
+    for pattern in patterns:
+        for path in download_dir.glob(pattern):
+            if path in seen or not path.is_file():
+                continue
+            seen.add(path)
+            try:
+                path.unlink()
+                removed += 1
+            except FileNotFoundError:
+                pass
+    return removed
+
+
 def normalize_price_tabs(page: ChromiumPage, target_url: str) -> None:
     price_tab_id = None
     homepage_tab_ids: list[str] = []
@@ -1241,6 +1258,7 @@ def main() -> int:
     username = env.get("MYSTEEL_USERNAME", "")
     password = env.get("MYSTEEL_PASSWORD", "")
     download_dir_str = args.download_dir or env.get("MYSTEEL_DOWNLOAD_DIR", "data")
+    clear_download_dir_enabled = parse_bool(env.get("MYSTEEL_CLEAR_DOWNLOAD_DIR"), default=True)
     chrome_path = env.get("MYSTEEL_CHROME_PATH", "")
     manual_date = args.manual_date or parse_bool(env.get("MYSTEEL_MANUAL_DATE"), default=False)
     force_run_non_workday = args.force_run_non_workday or parse_bool(env.get("MYSTEEL_FORCE_RUN_NON_WORKDAY"), default=False)
@@ -1266,6 +1284,9 @@ def main() -> int:
         log_stage(f"Strategy filter applied: {args.strategy} ({len(queries)} query/queries)")
     download_dir = Path(download_dir_str)
     output_dir = Path(args.output_dir)
+    if clear_download_dir_enabled:
+        removed = clear_download_dir(download_dir)
+        log_stage(f"Cleared download directory: removed {removed} old file(s)")
     page = create_page(Path(args.user_data_dir), download_dir, chrome_path=chrome_path)
     summaries: list[dict[str, Any]] = []
 

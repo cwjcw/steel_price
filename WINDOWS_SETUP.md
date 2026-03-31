@@ -1,4 +1,4 @@
-﻿﻿# Windows 部署说明
+﻿# Windows 部署说明
 
 这份文档用于指导你把 `steel_price` 部署到一台新的 Windows 机器上。
 
@@ -15,10 +15,12 @@
 
 - `README.md`
 - `WINDOWS_SETUP.md`
+- `UBUNTU_SETUP.md`
 - `pyproject.toml`
 - `uv.lock`
 - `queries.toml`
 - `.env.example`
+- `sitecustomize.py`
 - `scripts/`
 
 不建议复制的本地运行产物：
@@ -91,12 +93,20 @@ MYSTEEL_CHROME_PATH=C:\Users\YourUser\AppData\Local\Google\Chrome\Application\ch
 ```env
 MYSTEEL_USERNAME=your_mysteel_username
 MYSTEEL_PASSWORD=your_mysteel_password
-MYSTEEL_DOWNLOAD_DIR=E:\code\steel_price\data
-MYSTEEL_CHROME_PATH=C:\Users\YourUser\AppData\Local\Google\Chrome\Application\chrome.exe
+MYSTEEL_DOWNLOAD_DIR=E:\jerry\code\steel_price\data
+MYSTEEL_CLEAR_DOWNLOAD_DIR=true
+MYSTEEL_CHROME_PATH=C:\Program Files (x86)\Google\Chrome\Application\chrome.exe
 MYSTEEL_MANUAL_DATE=false
 MYSTEEL_FORCE_RUN_NON_WORKDAY=false
 MYSTEEL_RANDOM_START_ENABLED=false
 MYSTEEL_RANDOM_START_MAX_MINUTES=15
+BASIC_CODE_ROOT=E:\code\basic_code
+WX_CORP_ID=your_corp_id
+WX_AGENT_ID=your_agent_id
+WX_SECRET=your_secret
+WX_ROBOT_WEBHOOK=
+WECHAT_TOUSERS=user_a|user_b
+WECHAT_DEFAULT_FILE=E:\jerry\code\steel_price\data\Total_Price.xlsx
 ```
 
 说明：
@@ -104,6 +114,9 @@ MYSTEEL_RANDOM_START_MAX_MINUTES=15
 - `MYSTEEL_USERNAME` 和 `MYSTEEL_PASSWORD` 必填
 - `MYSTEEL_CHROME_PATH` 必须和新机器上的实际 Chrome 路径一致
 - `MYSTEEL_DOWNLOAD_DIR` 可以按你的部署路径调整
+- `BASIC_CODE_ROOT` 指向 `basic_code` 仓库根目录即可
+- `sitecustomize.py` 会在 Python 启动时自动读取 `.env`，并把 `BASIC_CODE_ROOT` 加入 `sys.path`
+- 因此所有脚本都可以直接 `import basic_code` 里的模块，不需要额外维护专门的导入桥接脚本
 
 ## 4. 安装项目依赖
 
@@ -116,7 +129,7 @@ uv sync
 如果你希望本地缓存也放在仓库目录里：
 
 ```powershell
-$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
 uv sync
 ```
 
@@ -153,7 +166,7 @@ uv sync
 单策略示例：
 
 ```powershell
-$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
 uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
 ```
 
@@ -162,7 +175,7 @@ uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
 当单策略都通过后，再执行全量：
 
 ```powershell
-$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
 uv run python .\scripts\mysteel_export_excel.py
 ```
 
@@ -177,7 +190,56 @@ Mysteel 当天价格通常不是一开盘就全部更新。
 
 如果脚本运行成功，但结果偏旧、为空、或条数不对，先检查 Mysteel 是否完成了当次更新。
 
-## 9. Windows Server 2012 R2 注意事项
+## 9. 汇总与企业微信发送
+
+### 生成汇总表
+
+```powershell
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
+uv run python .\scripts\build_total_price.py
+```
+
+这个脚本会读取当天的 `output/` 运行摘要，并生成固定文件 `data/Total_Price.xlsx`。
+
+### 发送企业微信文件
+
+请先在 `.env` 里配置：
+
+- `BASIC_CODE_ROOT`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WECHAT_TOUSERS`
+- `WECHAT_DEFAULT_FILE`
+
+执行：
+
+```powershell
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
+uv run python .\scripts\send_wechat_files.py
+```
+
+### 一键执行全流程
+
+```powershell
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
+uv run python .\scripts\run_daily_pipeline.py
+```
+
+执行顺序为：
+
+1. Mysteel 导出
+2. 生成 `Total_Price.xlsx`
+3. 发送企业微信文件
+
+如果当天只想导出和汇总，不发送企业微信：
+
+```powershell
+$env:UV_CACHE_DIR='E:\jerry\code\steel_price\.uv-cache'
+uv run python .\scripts\run_daily_pipeline.py --skip-send
+```
+
+## 10. Windows Server 2012 R2 注意事项
 
 如果目标环境是 Windows Server 2012 R2，请重点注意下面几项。
 
@@ -214,7 +276,7 @@ Mysteel 当天价格通常不是一开盘就全部更新。
   - `output/`
   - `.uv-cache/`
 
-## 10. 常见问题
+## 11. 常见问题
 
 ### 1. Chrome 路径错误
 
@@ -250,11 +312,20 @@ Configured Chrome binary does not exist
 - 日期范围是否正确
 - 查询条件是否过于严格
 
-## 11. 当前部署文档校对结果
+### 5. 企业微信发送时报 `Unable to import wechat.py`
+
+优先检查：
+
+- `.env` 中是否已设置 `BASIC_CODE_ROOT`
+- `BASIC_CODE_ROOT` 指向的目录是否真实存在
+- 目标目录里是否有 `wechat.py`
+
+## 12. 当前部署文档校对结果
 
 这份文档已按当前项目状态核对，确认过以下内容：
 
 - 新机器推荐迁移方式正确
 - `MYSTEEL_CHROME_PATH` 已是当前主脚本支持的正式配置项
+- `BASIC_CODE_ROOT` 已通过 `sitecustomize.py` 全局生效
 - 单策略和全量运行命令与当前代码一致
 - Windows Server 2012 R2 的主要风险点已覆盖
