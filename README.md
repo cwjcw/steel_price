@@ -1,132 +1,168 @@
-# steel_price
+﻿# steel_price
 
-Automates Mysteel Price Center filtering, querying, result selection, and Excel export.
+用于自动登录 Mysteel 价格中心，按配置执行筛选、查询、勾选结果并导出 Excel。
 
-## Overview
+## 项目概览
 
-Supported and verified strategies:
+当前项目已经支持并验证通过以下 4 个执行策略：
 
-- `cold_rolling`
-- `hot_rolling`
-- `building_steel`
-- `stainless_flat`
+- `cold_rolling`：冷轧
+- `hot_rolling`：热轧
+- `building_steel`：建筑钢材
+- `stainless_flat`：不锈钢平板
 
-Default outputs:
+默认输出位置：
 
-- Excel files are saved to `data/`
-- JSON run summaries are saved to `output/`
+- Excel 导出文件：`data/`
+- 每次运行的结果摘要：`output/`
 
-## Mysteel Update Timing
+## Mysteel 数据更新时间
 
-Please pay attention to Mysteel update timing, otherwise the script may run correctly while the latest prices are not published yet.
+使用这套脚本时，最容易误判的不是“脚本出错”，而是“脚本跑通了，但 Mysteel 当次价格还没更新”。
 
-Recommended rule of thumb:
+经验上建议按下面的时间理解：
 
-- Morning prices are usually updated after `10:00`
-- Evening prices are usually updated after `16:30`
+- 早盘数据一般在 `10:00` 之后更新
+- 晚盘数据一般在 `16:30` 之后更新
 
-Recommended schedule:
+建议定时任务的执行时间：
 
-- Morning jobs: after `10:05`
-- Evening jobs: after `16:35`
+- 早盘任务尽量放在 `10:05` 之后
+- 晚盘任务尽量放在 `16:35` 之后
 
-## Repository Layout
+如果脚本执行成功，但导出内容为空、条数明显不对，或者还是前一时段的数据，先优先确认是否还没到 Mysteel 的更新时间。
+
+## 目录结构
 
 ```text
 steel_price/
 |- README.md
+|- WINDOWS_SETUP.md
 |- pyproject.toml
+|- uv.lock
 |- queries.toml
+|- .env.example
+|- .gitattributes
+|- .gitignore
 |- scripts/
 |  |- mysteel_export_excel.py
-|  |- strategies/
-|  |  |- registry.py
-|  |  |- cold_rolling.py
-|  |  |- hot_rolling.py
-|  |  |- building_steel.py
-|  |  `- stainless_flat.py
+|  `- strategies/
+|     |- __init__.py
+|     |- registry.py
+|     |- cold_rolling.py
+|     |- hot_rolling.py
+|     |- building_steel.py
+|     `- stainless_flat.py
 |- data/
 `- output/
 ```
 
-## Main Script vs Strategy Scripts
+说明：
 
-### Main script: `scripts/mysteel_export_excel.py`
+- `data/`、`output/`、`.uv-cache/`、`Mysteel_Browser_Data/`、`.browser-profile/` 都属于本地运行产物，不建议纳入版本库同步。
+- `.env` 是本地私有配置，不建议提交。
 
-The main script handles the shared workflow:
+## 主脚本和策略脚本的区别
 
-- read `.env`
-- read `queries.toml`
-- parse CLI arguments
-- check workday status
-- open browser and log in
-- call the selected strategy
-- set date, search, select rows, export Excel
-- write `output/*.json`
+这是这个项目最重要的结构说明。
 
-Think of it as the scheduler and the common executor.
+### 主脚本：`scripts/mysteel_export_excel.py`
 
-### Strategy scripts: `scripts/strategies/*.py`
+主脚本负责通用流程，也就是不管哪个品类都大体一致的部分，例如：
 
-Each strategy script handles page-specific differences:
+- 读取 `.env`
+- 读取 `queries.toml`
+- 解析命令行参数
+- 判断工作日
+- 启动浏览器
+- 自动登录 Mysteel
+- 根据 `execution_strategy` 调用策略模块
+- 设置日期、搜索、勾选结果、导出 Excel
+- 生成 `output/*.json`
 
-- how navigation should be clicked
-- what each filter group is called on that page
-- which groups must be expanded first
-- whether extra fields exist, such as brand, delivery status, diameter, or mesh model
+可以把主脚本理解成整个项目的“调度器 + 通用执行器”。
 
-Think of each strategy as a page adapter.
+### 策略脚本：`scripts/strategies/*.py`
 
-### Relationship
+策略脚本负责页面差异适配。虽然几个页面整体流程相似，但字段名称、导航层级、是否需要展开、市场是否是 tab、是否存在额外字段，都可能不同。
 
-- The main script decides how to run.
-- The strategy script decides where to click on a specific page.
+每个策略脚本主要负责两件事：
 
-## Strategy Notes
+- 定义当前页面的字段映射
+- 定义当前页面的导航点击方式
+
+可以把策略脚本理解成“页面适配器”。
+
+### 两者关系
+
+- 主脚本决定“怎么跑”
+- 策略脚本决定“这个页面该点哪里、字段叫什么”
+
+## 当前策略说明
 
 ### `cold_rolling`
 
-- for cold rolling pages
-- top navigation: steel category -> cold rolling
-- product field uses product-name style grouping
-- market usually uses alphabet-group tabs
+适用于冷轧页面。
+
+特征：
+
+- 一级导航：`钢材`
+- 二级导航：`冷轧`
+- 产品字段使用 `品名`
+- 市场通常需要先按字母分组切换 tab
 
 ### `hot_rolling`
 
-- for hot rolling pages
-- top navigation: steel category -> hot rolling
-- product field uses product-kind style grouping
-- supports optional `diameter`
-- specification, material, and enterprise may need expansion first
+适用于热轧页面。
+
+特征：
+
+- 一级导航：`钢材`
+- 二级导航：`热轧`
+- 产品字段使用 `品种`
+- 支持可选扩展字段 `口径`
+- `规格 / 材质 / 企业` 可能需要先展开
 
 ### `building_steel`
 
-- for building steel pages
-- currently adapted for welded rebar mesh
-- supports extra field `mesh_model`
-- price type selection is commonly required
+适用于建筑钢材页面。
+
+当前已适配钢筋焊接网。
+
+特征：
+
+- 一级导航：`钢材`
+- 二级导航：`建筑钢材`
+- 产品字段使用 `品名`
+- 支持扩展字段 `网片型号`
+- 价格类型通常需要选择，例如 `市场价`
 
 ### `stainless_flat`
 
-- for stainless flat plate pages
-- navigation: nickel-chromium stainless steel -> stainless steel -> stainless flat plate
-- product field uses product-kind style grouping
-- classification field is required by page structure
-- market is a normal checkbox group, not alphabet tabs
-- material, specification, and enterprise are expandable groups
-- brand is kept but optional
-- delivery status is kept but optional
+适用于不锈钢平板页面。
 
-## Configuration
+特征：
 
-All queries are maintained in `queries.toml`.
+- 一级导航：`镍铬不锈钢`
+- 二级导航：`不锈钢`
+- 三级导航：`不锈钢平板`
+- 产品字段使用 `品种`
+- 分类字段使用 `分类`
+- 市场是普通 checkbox 组，不走字母 tab
+- `材质 / 规格 / 企业` 需要先展开
+- `品牌` 保留，但不是必选
+- `交货状态` 保留，但不是必选
 
-Current structure:
+## 配置说明
 
-- `strategies.<strategy_name>.defaults`
-- `strategies.<strategy_name>.queries`
+项目使用 `queries.toml` 维护所有查询配置。
 
-Common fields:
+当前结构是按策略分组：
+
+- `strategies.<strategy_name>.defaults`：这个策略的默认值
+- `strategies.<strategy_name>.queries`：这个策略下的具体查询项
+
+常见字段包括：
 
 - `execution_strategy`
 - `category`
@@ -150,9 +186,15 @@ Common fields:
 - `start_date`
 - `end_date`
 
-## Environment Variables
+说明：
 
-The main script reads these values from `.env`:
+- 不是每个策略都会用到所有字段
+- 哪些字段真正生效，取决于对应策略脚本中的字段映射
+- `brand`、`delivery_state`、`diameter`、`mesh_model` 这类字段通常是扩展项
+
+## `.env` 变量说明
+
+主脚本当前会读取以下环境变量：
 
 - `MYSTEEL_USERNAME`
 - `MYSTEEL_PASSWORD`
@@ -163,101 +205,145 @@ The main script reads these values from `.env`:
 - `MYSTEEL_RANDOM_START_ENABLED`
 - `MYSTEEL_RANDOM_START_MAX_MINUTES`
 
-Notes:
+其中：
 
-- `MYSTEEL_CHROME_PATH` lets you explicitly set the Chrome or Chromium executable path.
-- If `MYSTEEL_CHROME_PATH` is empty, the script falls back to built-in common Windows install paths.
+- `MYSTEEL_USERNAME`、`MYSTEEL_PASSWORD` 必填
+- `MYSTEEL_CHROME_PATH` 用于显式指定 Chrome 或 Chromium 可执行文件路径
+- 如果 `MYSTEEL_CHROME_PATH` 为空，脚本会回退到内置的常见 Windows 路径自动探测
 
-## Run Commands
+建议做法：
 
-Install dependencies:
+- 使用 `.env.example` 作为模板创建本地 `.env`
+- 不要把真实账号密码提交进版本库
+
+## 运行方式
+
+### 安装依赖
 
 ```powershell
 uv sync
 ```
 
-Run a single strategy:
+如果你希望把 `uv` 缓存放在项目内，也可以先设置：
 
 ```powershell
-$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'; uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv sync
 ```
 
-Available values:
+### 单独运行某个策略
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
+```
+
+可用策略值：
 
 - `cold_rolling`
 - `hot_rolling`
 - `building_steel`
 - `stainless_flat`
 
-Run all strategies:
+### 全量运行
 
 ```powershell
-$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'; uv run python .\scripts\mysteel_export_excel.py
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\mysteel_export_excel.py
 ```
 
-## Migration Notes for Other PCs or Windows Server 2012 R2
+### 常用参数
 
-### 1. Do not hard-code Chrome path in code
-
-Use `.env` instead:
-
-```env
-MYSTEEL_CHROME_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
+```powershell
+uv run python .\scripts\mysteel_export_excel.py --help
 ```
 
-When moving to another machine, update `.env` first instead of editing Python code.
+当前主脚本支持的主要参数：
 
-### 2. A real desktop browser session is required
+- `--url`
+- `--config`
+- `--user-data-dir`
+- `--download-dir`
+- `--output-dir`
+- `--target-date`
+- `--strategy`
+- `--manual-date`
+- `--force-run-non-workday`
 
-This project uses DrissionPage with a real browser, not a pure HTTP API workflow.
+## 工作日逻辑说明
 
-On Windows Server 2012 R2, make sure:
+主脚本会先调用节假日 API 判断是否工作日。
 
-- Chrome or compatible Chromium is installed
-- the running account has desktop session permission
-- browser can stay stable after remote desktop disconnect
-- ideally, testing is done under the same logged-in account that will run scheduled jobs
+逻辑如下：
 
-### 3. Writable directories are required
+- 如果节假日 API 可用，则优先使用 API 返回结果
+- 如果 API 不可用，例如 SSL 异常，则自动回退到“按星期判断工作日”
+- 周一到周五视为工作日，周六周日视为非工作日
 
-Make sure these paths are writable:
+如果你希望周末或节假日也强制运行，可以使用：
 
-- `data/`
-- `output/`
-- browser `user-data-dir`
-- `.uv-cache`
+```powershell
+uv run python .\scripts\mysteel_export_excel.py --force-run-non-workday
+```
 
-### 4. Windows Server 2012 R2 is old
+## 当前文档校对结果
 
-Check these items before deployment:
+这份 README 已按当前代码行为校对，重点确认过以下内容：
 
-- whether a usable Chrome version can still be installed
-- whether Python 3.12 runs reliably in that environment
-- whether TLS and certificates are healthy
-- whether required VC++ runtime libraries are installed
+- 已支持的策略列表与 `scripts/strategies/registry.py` 一致
+- `.env` 变量列表与主脚本读取逻辑一致
+- `MYSTEEL_CHROME_PATH` 已在主脚本中生效
+- `stainless_flat` 的导航层级和字段说明与当前实现一致
+- 运行命令与当前 `uv + python` 执行方式一致
 
-### 5. Use the same account for manual tests and scheduled tasks when possible
+## 排错建议
 
-Otherwise you may hit issues such as:
+### 1. Chrome 路径错误
 
-- different browser profile directory
-- lost login state
-- different download permissions
-- browser startup failure in a background session
+如果看到：
 
-### 6. Validate one strategy at a time before full runs
+```text
+Configured Chrome binary does not exist
+```
 
-Recommended validation order after migration:
+说明 `.env` 里的 `MYSTEEL_CHROME_PATH` 不存在或路径写错了。
 
-1. Confirm browser startup and Mysteel login
-2. Run `cold_rolling`
-3. Run `hot_rolling`
-4. Run `building_steel`
-5. Run `stainless_flat`
-6. Run the full job
+先用 PowerShell 查实际 Chrome 路径，再更新 `.env`。
 
-## Troubleshooting
+### 2. 节假日 API SSL 报错
 
-- If the browser opens but filters cannot be found, first check whether the Mysteel page structure changed.
-- If the script runs but returns no data, first check whether the latest prices have been published yet.
-- When adding a new category, add a new strategy first, then validate it with `--strategy`, and only after that run the full job.
+如果看到类似：
+
+```text
+holiday API unavailable ... fallback weekday rule used
+```
+
+说明节假日接口调用失败，但脚本已经自动切换到“按星期判断工作日”逻辑。
+
+这通常不会阻塞脚本继续运行。
+
+### 3. 页面能打开，但找不到筛选项
+
+优先检查：
+
+- 当前 `execution_strategy` 是否正确
+- Mysteel 页面标签是否变了
+- 对应策略脚本字段映射是否还匹配当前页面
+
+### 4. 脚本跑通，但没有数据
+
+优先检查：
+
+- 是否还没到 Mysteel 当次更新时间
+- 日期范围是否正确
+- 查询条件是否过窄
+
+### 5. 新增品类怎么扩展
+
+建议按这个顺序做：
+
+1. 在 `queries.toml` 中新增一个策略分组
+2. 在 `scripts/strategies/` 下新增一个策略脚本
+3. 在 `registry.py` 中注册这个策略
+4. 先用 `--strategy <新策略名>` 单独调通
+5. 再做全量运行验证
