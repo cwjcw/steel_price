@@ -1,4 +1,4 @@
-﻿# Windows 部署说明
+﻿﻿# Windows 部署说明
 
 这份文档用于指导你把 `steel_price` 部署到一台新的 Windows 机器上。
 
@@ -62,6 +62,24 @@ uv --version
 Get-ChildItem 'C:\Program Files\Google\Chrome\Application\chrome.exe',
 'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
 "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe" -ErrorAction SilentlyContinue
+```
+
+如果上面的命令没有结果，再继续尝试：
+
+```powershell
+where.exe chrome
+```
+
+如果还没有结果，再扩大范围搜索：
+
+```powershell
+Get-ChildItem 'C:\Program Files','C:\Program Files (x86)',"$env:LOCALAPPDATA" -Recurse -Filter chrome.exe -ErrorAction SilentlyContinue
+```
+
+找到实际路径后，把它写进 `.env`：
+
+```env
+MYSTEEL_CHROME_PATH=C:\Users\YourUser\AppData\Local\Google\Chrome\Application\chrome.exe
 ```
 
 ## 3. 在新机器创建 `.env`

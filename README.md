@@ -1,4 +1,4 @@
-﻿# steel_price
+﻿﻿# steel_price
 
 用于自动登录 Mysteel 价格中心，按配置执行筛选、查询、勾选结果并导出 Excel。
 
@@ -15,6 +15,11 @@
 
 - Excel 导出文件：`data/`
 - 每次运行的结果摘要：`output/`
+
+部署相关文档：
+
+- Windows 部署说明：`WINDOWS_SETUP.md`
+- Ubuntu 部署说明：`UBUNTU_SETUP.md`
 
 ## Mysteel 数据更新时间
 
@@ -250,6 +255,15 @@ uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
 uv run python .\scripts\mysteel_export_excel.py
+```
+
+### Ubuntu / Linux 运行示例
+
+```bash
+cd /path/to/steel_price
+export UV_CACHE_DIR="$PWD/.uv-cache"
+uv sync
+uv run python ./scripts/mysteel_export_excel.py
 ```
 
 ### 常用参数
