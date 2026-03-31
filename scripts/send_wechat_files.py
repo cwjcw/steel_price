@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+from pprint import pformat
 
 from dotenv import load_dotenv
 
@@ -10,6 +11,28 @@ from dotenv import load_dotenv
 def parse_recipients(raw: str) -> list[str]:
     normalized = raw.replace(";", ",").replace("|", ",").replace("\n", ",")
     return [item.strip() for item in normalized.split(",") if item.strip()]
+
+
+def format_wecom_result(result: object) -> str:
+    if result is None:
+        return "None"
+    if isinstance(result, dict):
+        errcode = result.get("errcode")
+        errmsg = result.get("errmsg")
+        if errcode is not None or errmsg is not None:
+            return f"errcode={errcode}, errmsg={errmsg}"
+    return pformat(result, compact=True)
+
+
+def ensure_wecom_success(result: object, recipient: str) -> None:
+    if result is None:
+        raise RuntimeError(
+            f"WeCom send returned None for recipient {recipient}. Check PYTHONPATH, WX_* environment variables, and upstream API responses."
+        )
+    if isinstance(result, dict) and result.get("errcode") not in (None, 0):
+        raise RuntimeError(
+            f"WeCom send failed for recipient {recipient}: {format_wecom_result(result)}"
+        )
 
 
 def main() -> int:
@@ -38,14 +61,15 @@ def main() -> int:
         from wechat import WeChatPusher  # type: ignore
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "Unable to import wechat.py. Set BASIC_CODE_ROOT in .env or environment variables so Python can import the basic_code repository."
+            "Unable to import wechat.py. Set PYTHONPATH to the basic_code repository root before running this script."
         ) from exc
 
     pusher = WeChatPusher()
     for path in file_args:
         for recipient in recipients:
             result = pusher.send_app_msg(str(path), msg_type="file", touser=recipient)
-            print(f"Sent {path.name} to {recipient}: {result}")
+            ensure_wecom_success(result, recipient)
+            print(f"Sent {path.name} to {recipient}: {format_wecom_result(result)}")
     return 0
 
 

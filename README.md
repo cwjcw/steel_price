@@ -51,7 +51,6 @@ steel_price/
 |- .env.example
 |- .gitattributes
 |- .gitignore
-|- sitecustomize.py
 |- scripts/
 |  |- mysteel_export_excel.py
 |  |- build_total_price.py
@@ -72,7 +71,7 @@ steel_price/
 
 - `data/`、`output/`、`.uv-cache/`、`Mysteel_Browser_Data/`、`.browser-profile/` 都属于本地运行产物，不建议纳入版本库同步。
 - `.env` 是本地私有配置，不建议提交。
-- `sitecustomize.py` 会在 Python 启动时自动读取 `.env`，并根据 `BASIC_CODE_ROOT` 把 `basic_code` 仓库加入 `sys.path`。
+- `basic_code` 的导入现在统一通过 `PYTHONPATH` 完成，不再依赖项目内的 `sitecustomize.py`。
 
 ## 主脚本和策略脚本的区别
 
@@ -205,9 +204,11 @@ steel_price/
 - 哪些字段真正生效，取决于对应策略脚本中的字段映射
 - `brand`、`delivery_state`、`diameter`、`mesh_model` 这类字段通常是扩展项
 
-## `.env` 变量说明
+## 环境变量说明
 
-主脚本和附属脚本当前会读取以下环境变量：
+### `.env` 中的项目变量
+
+主脚本和附属脚本当前会读取以下 `.env` 变量：
 
 - `MYSTEEL_USERNAME`
 - `MYSTEEL_PASSWORD`
@@ -218,11 +219,6 @@ steel_price/
 - `MYSTEEL_FORCE_RUN_NON_WORKDAY`
 - `MYSTEEL_RANDOM_START_ENABLED`
 - `MYSTEEL_RANDOM_START_MAX_MINUTES`
-- `BASIC_CODE_ROOT`
-- `WX_CORP_ID`
-- `WX_AGENT_ID`
-- `WX_SECRET`
-- `WX_ROBOT_WEBHOOK`
 - `WECHAT_TOUSERS`
 - `WECHAT_DEFAULT_FILE`
 
@@ -232,14 +228,23 @@ steel_price/
 - `MYSTEEL_CLEAR_DOWNLOAD_DIR` 控制导出前是否清空 `data/` 里的旧 Excel
 - `MYSTEEL_CHROME_PATH` 用于显式指定 Chrome 或 Chromium 可执行文件路径
 - 如果 `MYSTEEL_CHROME_PATH` 为空，脚本会回退到内置的常见 Windows 路径自动探测
-- `BASIC_CODE_ROOT` 用于把 `basic_code` 仓库加入 Python 导入路径
-- `WX_*` 和 `WECHAT_*` 用于企业微信文件发送
+- `WECHAT_TOUSERS` 和 `WECHAT_DEFAULT_FILE` 用于企业微信文件发送
+
+### 系统环境变量
+
+`basic_code` 的导入和企业微信配置现在统一走系统环境变量：
+
+- `PYTHONPATH`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WX_ROBOT_WEBHOOK`
 
 建议做法：
 
-- 使用 `.env.example` 作为模板创建本地 `.env`
-- 不要把真实账号密码提交进版本库
-- 只要 `.env` 中配置了 `BASIC_CODE_ROOT`，所有脚本都可以直接 `import basic_code` 里的模块，不需要额外维护专门的导入桥接脚本
+- 在 Windows 或 Ubuntu 上，把 `basic_code` 根目录加入 `PYTHONPATH`
+- `wechat.py` 依赖的 `WX_*` 配置，放在系统环境变量里，或保证启动进程时这些变量已存在
+- `.env.example` 只保留本项目自身变量，不再承担 `basic_code` 导入职责
 
 ## 运行方式
 
@@ -315,14 +320,12 @@ uv run python .\scripts\build_total_price.py
 
 ### 发送企业微信文件
 
-先在 `.env` 中配置：
+先确保这些条件满足：
 
-- `BASIC_CODE_ROOT`
-- `WX_CORP_ID`
-- `WX_AGENT_ID`
-- `WX_SECRET`
-- `WECHAT_TOUSERS`
-- `WECHAT_DEFAULT_FILE`
+- `PYTHONPATH` 已包含 `basic_code` 根目录
+- `WX_CORP_ID`、`WX_AGENT_ID`、`WX_SECRET` 已在系统环境变量中设置
+- `.env` 中已配置 `WECHAT_TOUSERS`
+- `.env` 中已配置 `WECHAT_DEFAULT_FILE`
 
 然后执行：
 
@@ -408,7 +411,7 @@ uv run python .\scripts\mysteel_export_excel.py --force-run-non-workday
 - 已支持的策略列表与 `scripts/strategies/registry.py` 一致
 - `.env` 变量列表与主脚本和附属脚本读取逻辑一致
 - `MYSTEEL_CHROME_PATH` 已在主脚本中生效
-- `BASIC_CODE_ROOT` 已通过 `sitecustomize.py` 全局接入 Python 导入路径
+- `basic_code` 导入方案已切换为 `PYTHONPATH`
 - `stainless_flat` 的导航层级和字段说明与当前实现一致
 - 运行命令与当前 `uv + python` 执行方式一致
 
@@ -456,13 +459,13 @@ holiday API unavailable ... fallback weekday rule used
 
 ### 5. 企业微信发送时报 `Unable to import wechat.py`
 
-说明当前 Python 进程没有找到 `basic_code` 仓库。
+说明当前 Python 进程没有从 `PYTHONPATH` 找到 `basic_code` 里的 `wechat.py`。
 
 优先检查：
 
-- `.env` 中是否已设置 `BASIC_CODE_ROOT`
-- `BASIC_CODE_ROOT` 指向的目录是否真实存在
+- `PYTHONPATH` 是否包含 `basic_code` 根目录
 - 目标目录里是否有 `wechat.py`
+- 当前使用的 Python 解释器是否和设置环境变量后的终端一致
 
 ### 6. 新增品类怎么扩展
 

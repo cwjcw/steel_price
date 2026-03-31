@@ -24,7 +24,6 @@
 - `uv.lock`
 - `queries.toml`
 - `.env.example`
-- `sitecustomize.py`
 - `scripts/`
 
 不建议复制的本地运行产物：
@@ -86,7 +85,9 @@ command -v chromium
 MYSTEEL_CHROME_PATH=/usr/bin/google-chrome
 ```
 
-## 4. 创建 `.env`
+## 4. 配置环境变量
+
+### 4.1 项目 `.env`
 
 建议从 `.env.example` 复制出 `.env`。
 
@@ -102,20 +103,34 @@ MYSTEEL_MANUAL_DATE=false
 MYSTEEL_FORCE_RUN_NON_WORKDAY=false
 MYSTEEL_RANDOM_START_ENABLED=false
 MYSTEEL_RANDOM_START_MAX_MINUTES=15
-BASIC_CODE_ROOT=/path/to/basic_code
-WX_CORP_ID=your_corp_id
-WX_AGENT_ID=your_agent_id
-WX_SECRET=your_secret
-WX_ROBOT_WEBHOOK=
 WECHAT_TOUSERS=user_a|user_b
 WECHAT_DEFAULT_FILE=/path/to/steel_price/data/Total_Price.xlsx
 ```
 
+### 4.2 系统环境变量
+
+`basic_code` 的导入和企业微信配置统一走系统环境变量：
+
+- `PYTHONPATH`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WX_ROBOT_WEBHOOK`
+
+示例：
+
+```bash
+export PYTHONPATH=/path/to/basic_code
+export WX_CORP_ID=your_corp_id
+export WX_AGENT_ID=your_agent_id
+export WX_SECRET=your_secret
+```
+
 说明：
 
-- `BASIC_CODE_ROOT` 指向 `basic_code` 仓库根目录即可
-- `sitecustomize.py` 会在 Python 启动时自动读取 `.env`，并把 `BASIC_CODE_ROOT` 加入 `sys.path`
-- 因此所有脚本都可以直接 `import basic_code` 里的模块，不需要额外维护专门的导入桥接脚本
+- `PYTHONPATH` 要指向 `basic_code` 仓库根目录
+- 这样 Python 才能直接 `import wechat`
+- 本项目不再依赖 `sitecustomize.py`
 
 ## 5. 安装依赖
 
@@ -172,14 +187,12 @@ uv run python ./scripts/build_total_price.py
 
 ### 发送企业微信文件
 
-请先在 `.env` 里配置：
+请先确认：
 
-- `BASIC_CODE_ROOT`
-- `WX_CORP_ID`
-- `WX_AGENT_ID`
-- `WX_SECRET`
-- `WECHAT_TOUSERS`
-- `WECHAT_DEFAULT_FILE`
+- `PYTHONPATH` 已包含 `basic_code` 根目录
+- `WX_CORP_ID`、`WX_AGENT_ID`、`WX_SECRET` 已在系统环境变量中设置
+- `.env` 中已配置 `WECHAT_TOUSERS`
+- `.env` 中已配置 `WECHAT_DEFAULT_FILE`
 
 执行：
 
@@ -270,6 +283,6 @@ which chromium
 
 优先检查：
 
-- `.env` 中是否已设置 `BASIC_CODE_ROOT`
-- `BASIC_CODE_ROOT` 指向的目录是否真实存在
+- `PYTHONPATH` 是否已包含 `basic_code` 根目录
 - 目标目录里是否有 `wechat.py`
+- 当前 shell 是否已经加载新的环境变量

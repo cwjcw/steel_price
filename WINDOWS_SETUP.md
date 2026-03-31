@@ -20,7 +20,6 @@
 - `uv.lock`
 - `queries.toml`
 - `.env.example`
-- `sitecustomize.py`
 - `scripts/`
 
 不建议复制的本地运行产物：
@@ -84,7 +83,9 @@ Get-ChildItem 'C:\Program Files','C:\Program Files (x86)',"$env:LOCALAPPDATA" -R
 MYSTEEL_CHROME_PATH=C:\Users\YourUser\AppData\Local\Google\Chrome\Application\chrome.exe
 ```
 
-## 3. 在新机器创建 `.env`
+## 3. 配置环境变量
+
+### 3.1 项目 `.env`
 
 建议从 `.env.example` 复制出 `.env`。
 
@@ -100,23 +101,43 @@ MYSTEEL_MANUAL_DATE=false
 MYSTEEL_FORCE_RUN_NON_WORKDAY=false
 MYSTEEL_RANDOM_START_ENABLED=false
 MYSTEEL_RANDOM_START_MAX_MINUTES=15
-BASIC_CODE_ROOT=E:\code\basic_code
-WX_CORP_ID=your_corp_id
-WX_AGENT_ID=your_agent_id
-WX_SECRET=your_secret
-WX_ROBOT_WEBHOOK=
 WECHAT_TOUSERS=user_a|user_b
 WECHAT_DEFAULT_FILE=E:\jerry\code\steel_price\data\Total_Price.xlsx
 ```
 
+### 3.2 Windows 用户环境变量
+
+`basic_code` 的导入和企业微信发送配置，改为放在系统环境变量里。
+
+至少需要设置：
+
+- `PYTHONPATH`
+- `WX_CORP_ID`
+- `WX_AGENT_ID`
+- `WX_SECRET`
+- `WX_ROBOT_WEBHOOK`（可选）
+
+示例：
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('PYTHONPATH', 'E:\jerry\code\basic_code', 'User')
+[System.Environment]::SetEnvironmentVariable('WX_CORP_ID', 'your_corp_id', 'User')
+[System.Environment]::SetEnvironmentVariable('WX_AGENT_ID', 'your_agent_id', 'User')
+[System.Environment]::SetEnvironmentVariable('WX_SECRET', 'your_secret', 'User')
+```
+
+设置完成后，重新打开 PowerShell 或 VSCode 终端，再检查：
+
+```powershell
+$env:PYTHONPATH
+$env:WX_CORP_ID
+```
+
 说明：
 
-- `MYSTEEL_USERNAME` 和 `MYSTEEL_PASSWORD` 必填
-- `MYSTEEL_CHROME_PATH` 必须和新机器上的实际 Chrome 路径一致
-- `MYSTEEL_DOWNLOAD_DIR` 可以按你的部署路径调整
-- `BASIC_CODE_ROOT` 指向 `basic_code` 仓库根目录即可
-- `sitecustomize.py` 会在 Python 启动时自动读取 `.env`，并把 `BASIC_CODE_ROOT` 加入 `sys.path`
-- 因此所有脚本都可以直接 `import basic_code` 里的模块，不需要额外维护专门的导入桥接脚本
+- `PYTHONPATH` 要指向 `basic_code` 仓库根目录
+- 这样 Python 才能直接 `import wechat`
+- 本项目不再依赖 `sitecustomize.py`
 
 ## 4. 安装项目依赖
 
@@ -203,14 +224,12 @@ uv run python .\scripts\build_total_price.py
 
 ### 发送企业微信文件
 
-请先在 `.env` 里配置：
+请先确认：
 
-- `BASIC_CODE_ROOT`
-- `WX_CORP_ID`
-- `WX_AGENT_ID`
-- `WX_SECRET`
-- `WECHAT_TOUSERS`
-- `WECHAT_DEFAULT_FILE`
+- `PYTHONPATH` 已包含 `basic_code` 根目录
+- `WX_CORP_ID`、`WX_AGENT_ID`、`WX_SECRET` 已在系统环境变量中设置
+- `.env` 中已配置 `WECHAT_TOUSERS`
+- `.env` 中已配置 `WECHAT_DEFAULT_FILE`
 
 执行：
 
@@ -316,9 +335,9 @@ Configured Chrome binary does not exist
 
 优先检查：
 
-- `.env` 中是否已设置 `BASIC_CODE_ROOT`
-- `BASIC_CODE_ROOT` 指向的目录是否真实存在
+- `PYTHONPATH` 是否已包含 `basic_code` 根目录
 - 目标目录里是否有 `wechat.py`
+- 当前终端是否已经重新打开并读取到新的环境变量
 
 ## 12. 当前部署文档校对结果
 
@@ -326,6 +345,6 @@ Configured Chrome binary does not exist
 
 - 新机器推荐迁移方式正确
 - `MYSTEEL_CHROME_PATH` 已是当前主脚本支持的正式配置项
-- `BASIC_CODE_ROOT` 已通过 `sitecustomize.py` 全局生效
+- `basic_code` 导入方式已切换为 `PYTHONPATH`
 - 单策略和全量运行命令与当前代码一致
 - Windows Server 2012 R2 的主要风险点已覆盖
