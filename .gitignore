@@ -210,3 +210,7 @@ __marimo__/
 .uv-cache/
 data/
 *.xlsx
+Mysteel_Browser_Data/
+data/
+output/
+.env
