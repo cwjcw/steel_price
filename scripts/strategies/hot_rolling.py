@@ -1,17 +1,18 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 STRATEGY_NAME = "hot_rolling"
 
 FIELD_PROFILE = {
-    "product_label": "åå",
-    "spec_label": "è§æ ¼",
-    "material_label": "æè´¨",
-    "market_label": "å¸åº",
-    "mill_labels": ["ä¼ä¸", "é¢å", "é¢å/äº§å°"],
-    "price_type_label": "ä»·æ ¼ç±»å",
+    "product_label": "品种",
+    "spec_label": "规格",
+    "material_label": "材质",
+    "market_label": "市场",
+    "mill_labels": ["企业", "钢厂", "钢厂/产地"],
+    "price_type_label": "",
     "extra_groups": {
-        "diameters": "å£å¾",
+        "diameters": "口径",
     },
+    "expandable_groups": ["规格", "材质", "企业"],
 }
 
 

@@ -34,16 +34,16 @@ specification = ["2.75*1250*C"]
 material = ["SPHC"]
 market_group = "QRSTU"
 market = ["上海"]
-mill = []
+mill = ["首钢集团"]
 
 [[strategies.hot_rolling.queries]]
 name = "热轧板卷_石家庄_Q235"
-product_name = []
+product_name = ["热轧板卷"]
 specification = ["2.5*1500*C"]
 material = ["Q235"]
 market_group = "QRSTU"
 market = ["石家庄"]
-mill = []
+mill = ["河北敬业"]
 
 [strategies.building_steel.defaults]
 execution_strategy = "building_steel"
@@ -71,7 +71,7 @@ second_nav = "不锈钢"
 third_nav = "不锈钢平板"
 price_type = "含税"
 price_scope = "按日期"
-publish_time = "晚盘价格"
+publish_time = "全天价格"
 unit = "元/吨"
 
 [[strategies.stainless_flat.queries]]

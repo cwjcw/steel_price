@@ -3,15 +3,16 @@ from __future__ import annotations
 STRATEGY_NAME = "building_steel"
 
 FIELD_PROFILE = {
-    "product_label": "åå",
-    "spec_label": "è§æ ¼",
-    "material_label": "æè´¨",
-    "market_label": "å¸åº",
-    "mill_labels": ["é¢å/äº§å°", "ä¼ä¸", "é¢å"],
-    "price_type_label": "ä»·æ ¼ç±»å",
+    "product_label": "品名",
+    "spec_label": "规格",
+    "material_label": "材质",
+    "market_label": "市场",
+    "mill_labels": ["钢厂/产地", "企业", "钢厂"],
+    "price_type_label": "价格类型",
     "extra_groups": {
-        "mesh_models": "ç½çåå·",
+        "mesh_models": "网片型号",
     },
+    "expandable_groups": ["规格", "材质"],
 }
 
 

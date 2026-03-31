@@ -22,6 +22,7 @@ from DrissionPage import ChromiumOptions, ChromiumPage
 from scripts.strategies.registry import STRATEGIES
 
 ZH_PRODUCT = "\u54c1\u540d"
+ZH_PRODUCT_KIND = "\u54c1\u79cd"
 ZH_SPEC = "\u89c4\u683c"
 ZH_MATERIAL = "\u6750\u8d28"
 ZH_MARKET = "\u5e02\u573a"
@@ -29,6 +30,7 @@ ZH_MILL = "\u94a2\u5382"
 ZH_ENTERPRISE = "\u4f01\u4e1a"
 ZH_ORIGIN = "\u94a2\u5382/\u4ea7\u5730"
 ZH_BRAND = "\u54c1\u724c"
+ZH_DELIVERY_STATUS = "\u4ea4\u8d27\u72b6\u6001"
 ZH_MESH_MODEL = "\u7f51\u7247\u578b\u53f7"
 ZH_DIAMETER = "\u53e3\u5f84"
 ZH_PRICE_TYPE = "\u4ef7\u683c\u7c7b\u578b"
@@ -68,53 +70,80 @@ PRODUCT_FIELD_PROFILES: dict[str, dict[str, Any]] = {
         },
         "expandable_groups": [],
     },
-    "\u51b7\u8f67\u4e0d\u9508\u5e73\u677f": {
-        "product_label": ZH_PRODUCT,
+    "\u4e0d\u9508\u94a2\u5e73\u677f": {
+        "product_label": ZH_PRODUCT_KIND,
         "spec_label": ZH_SPEC,
         "material_label": ZH_MATERIAL,
         "market_label": ZH_MARKET,
-        "mill_labels": [ZH_ENTERPRISE, ZH_ORIGIN, ZH_MILL],
+        "mill_labels": [ZH_ENTERPRISE],
         "price_type_label": ZH_CLASSIFICATION,
         "extra_groups": {
             "brands": ZH_BRAND,
+            "delivery_states": ZH_DELIVERY_STATUS,
         },
-        "expandable_groups": [ZH_SPEC],
+        "expandable_groups": [ZH_MATERIAL, ZH_SPEC, ZH_ENTERPRISE],
+    },
+    "\u51b7\u8f67\u4e0d\u9508\u5e73\u677f": {
+        "product_label": ZH_PRODUCT_KIND,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ENTERPRISE],
+        "price_type_label": ZH_CLASSIFICATION,
+        "extra_groups": {
+            "brands": ZH_BRAND,
+            "delivery_states": ZH_DELIVERY_STATUS,
+        },
+        "expandable_groups": [ZH_MATERIAL, ZH_SPEC, ZH_ENTERPRISE],
+    },
+    "\u70ed\u8f67\u4e0d\u9508\u5e73\u677f": {
+        "product_label": ZH_PRODUCT_KIND,
+        "spec_label": ZH_SPEC,
+        "material_label": ZH_MATERIAL,
+        "market_label": ZH_MARKET,
+        "mill_labels": [ZH_ENTERPRISE],
+        "price_type_label": ZH_CLASSIFICATION,
+        "extra_groups": {
+            "brands": ZH_BRAND,
+            "delivery_states": ZH_DELIVERY_STATUS,
+        },
+        "expandable_groups": [ZH_MATERIAL, ZH_SPEC, ZH_ENTERPRISE],
     },
     "\u70ed\u8f67\u677f\u5377": {
-        "product_label": ZH_PRODUCT,
+        "product_label": ZH_PRODUCT_KIND,
         "spec_label": ZH_SPEC,
         "material_label": ZH_MATERIAL,
         "market_label": ZH_MARKET,
         "mill_labels": [ZH_ENTERPRISE, ZH_MILL, ZH_ORIGIN],
-        "price_type_label": ZH_PRICE_TYPE,
+        "price_type_label": "",
         "extra_groups": {
             "diameters": ZH_DIAMETER,
         },
-        "expandable_groups": [ZH_ENTERPRISE],
+        "expandable_groups": [ZH_SPEC, ZH_MATERIAL, ZH_ENTERPRISE],
     },
     "\u70ed\u8f67\u9178\u6d17\u677f\u5377": {
-        "product_label": ZH_PRODUCT,
+        "product_label": ZH_PRODUCT_KIND,
         "spec_label": ZH_SPEC,
         "material_label": ZH_MATERIAL,
         "market_label": ZH_MARKET,
         "mill_labels": [ZH_ENTERPRISE, ZH_MILL, ZH_ORIGIN],
-        "price_type_label": ZH_PRICE_TYPE,
+        "price_type_label": "",
         "extra_groups": {
             "diameters": ZH_DIAMETER,
         },
-        "expandable_groups": [ZH_ENTERPRISE],
+        "expandable_groups": [ZH_SPEC, ZH_MATERIAL, ZH_ENTERPRISE],
     },
     "\u70ed\u8f67": {
-        "product_label": ZH_PRODUCT,
+        "product_label": ZH_PRODUCT_KIND,
         "spec_label": ZH_SPEC,
         "material_label": ZH_MATERIAL,
         "market_label": ZH_MARKET,
         "mill_labels": [ZH_ENTERPRISE, ZH_MILL, ZH_ORIGIN],
-        "price_type_label": ZH_PRICE_TYPE,
+        "price_type_label": "",
         "extra_groups": {
             "diameters": ZH_DIAMETER,
         },
-        "expandable_groups": [ZH_ENTERPRISE],
+        "expandable_groups": [ZH_SPEC, ZH_MATERIAL, ZH_ENTERPRISE],
     },
 }
 
@@ -156,6 +185,7 @@ class Query:
     markets: list[str]
     mills: list[str]
     brands: list[str]
+    delivery_states: list[str]
     mesh_models: list[str]
     diameters: list[str]
     price_scope: str
@@ -248,7 +278,14 @@ def first_existing_form_item(page: ChromiumPage, label_texts: list[str], timeout
     return None, None
 
 
-def chrome_binary() -> str | None:
+def chrome_binary(configured_path: str = "") -> str | None:
+    configured = str(configured_path or "").strip()
+    if configured:
+        configured_candidate = Path(configured).expanduser()
+        if configured_candidate.exists():
+            return str(configured_candidate)
+        raise RuntimeError(f"Configured Chrome binary does not exist: {configured}")
+
     for candidate in CHROME_BINARY_CANDIDATES:
         if candidate.exists():
             return str(candidate)
@@ -336,12 +373,12 @@ def wait_until(page: ChromiumPage, condition_js: str, timeout: float = 10, inter
     return False
 
 
-def create_page(user_data_dir: Path, download_dir: Path) -> ChromiumPage:
+def create_page(user_data_dir: Path, download_dir: Path, chrome_path: str = "") -> ChromiumPage:
     user_data_dir.mkdir(parents=True, exist_ok=True)
     download_dir.mkdir(parents=True, exist_ok=True)
 
     co = ChromiumOptions()
-    binary = chrome_binary()
+    binary = chrome_binary(chrome_path)
     if binary:
         co.set_browser_path(binary)
     co.set_user_data_path(str(user_data_dir))
@@ -356,7 +393,35 @@ def latest_file(directory: Path, pattern: str) -> Path | None:
     return files[0] if files else None
 
 
+def normalize_price_tabs(page: ChromiumPage, target_url: str) -> None:
+    price_tab_id = None
+    homepage_tab_ids: list[str] = []
+
+    try:
+        for tab in page.get_tabs():
+            tab_id = getattr(tab, "tab_id", "") or ""
+            tab_url = (getattr(tab, "url", "") or "").lower()
+            if "price-search" in tab_url:
+                price_tab_id = tab_id
+            elif tab_url.rstrip("/") in {"https://www.mysteel.com", "https://www.mysteel.com/#", "https://www.mysteel.com/index.html"}:
+                if tab_id:
+                    homepage_tab_ids.append(tab_id)
+    except Exception:
+        return
+
+    if price_tab_id:
+        page.activate_tab(price_tab_id)
+        human_pause(0.8, 1.4)
+        for tab_id in homepage_tab_ids:
+            if tab_id != price_tab_id:
+                try:
+                    page.close_tabs(tab_id)
+                except Exception:
+                    pass
+
+
 def ensure_price_page(page: ChromiumPage, target_url: str) -> None:
+    normalize_price_tabs(page, target_url)
     try:
         current_url = page.url or ""
     except Exception:
@@ -370,6 +435,7 @@ def ensure_price_page(page: ChromiumPage, target_url: str) -> None:
             if "price-search" in tab_url:
                 page.activate_tab(getattr(tab, "tab_id", tab))
                 human_pause(0.8, 1.4)
+                normalize_price_tabs(page, target_url)
                 return
     except Exception:
         pass
@@ -378,6 +444,7 @@ def ensure_price_page(page: ChromiumPage, target_url: str) -> None:
     page.wait.load_start()
     page.wait.doc_loaded()
     human_pause(1.0, 1.8)
+    normalize_price_tabs(page, target_url)
 
 
 def dismiss_intro_guide(page: ChromiumPage) -> None:
@@ -506,6 +573,7 @@ def auto_login_if_needed(page: ChromiumPage, username: str, password: str, targe
 
     human_pause(2.0, 3.0)
     log_stage("Login completed; returning to price-search page")
+    normalize_price_tabs(page, target_url)
     ensure_price_page(page, target_url)
 
 
@@ -513,7 +581,9 @@ def click_main_nav(page: ChromiumPage, label_text: str, timeout: float = 8) -> N
     if not label_text:
         return
     locators = [
-        f'xpath://div[contains(@class,"top") or contains(@class,"nav") or contains(@class,"menu")]//*[self::div or self::span or self::a][contains(normalize-space(.),"{label_text}")]',
+        f'xpath://div[contains(@class,"main-nav")]//div[contains(@class,"row") and normalize-space(.)="{label_text}"]',
+        f'xpath://div[contains(@class,"main-nav")]//div[contains(@class,"row")][contains(normalize-space(.),"{label_text}")]',
+        f'xpath://div[contains(@class,"menu-breed")]//*[self::div or self::span or self::a][contains(normalize-space(.),"{label_text}")]',
         f'text={label_text}',
     ]
     for locator in locators:
@@ -523,7 +593,7 @@ def click_main_nav(page: ChromiumPage, label_text: str, timeout: float = 8) -> N
             ele = None
         if ele:
             ele.click(by_js=True)
-            human_pause(1.0, 1.8)
+            human_pause(1.2, 2.0)
             return
     raise RuntimeError(f"Main navigation item not found: {label_text}")
 
@@ -538,18 +608,20 @@ def visible_sub_navs(page: ChromiumPage):
 def click_sub_nav(page: ChromiumPage, label_text: str, nav_index: int = 0, timeout: float = 8) -> None:
     if not label_text:
         return
-    navs = visible_sub_navs(page)
-    if len(navs) <= nav_index:
-        raise RuntimeError(f"Sub-navigation level {nav_index + 1} not found for: {label_text}")
-    nav = navs[nav_index]
-    item = nav.ele(
-        f'xpath:.//div[contains(@class,"row") and contains(normalize-space(.),"{label_text}")]',
-        timeout=timeout,
-    )
-    if not item:
-        raise RuntimeError(f"Sub-navigation option not found: {label_text}")
-    item.click(by_js=True)
-    human_pause(1.0, 1.8)
+    for _ in range(2):
+        navs = visible_sub_navs(page)
+        if len(navs) > nav_index:
+            nav = navs[nav_index]
+            item = nav.ele(
+                f'xpath:.//div[contains(@class,"row") and contains(normalize-space(.),"{label_text}")]',
+                timeout=2,
+            )
+            if item:
+                item.click(by_js=True)
+                human_pause(1.0, 1.8)
+                return
+        human_pause(0.8, 1.2)
+    raise RuntimeError(f"Sub-navigation option not found: {label_text}")
 
 
 def form_item_by_label(page: ChromiumPage, label_text: str, timeout: float = 8):
@@ -580,18 +652,26 @@ def click_checkbox_in_group(page: ChromiumPage, group_label: str, option_label: 
             raise RuntimeError(f"Checkbox group not found: {group_label}")
         return False
 
-    locator = f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and contains(normalize-space(.),"{option_label}")]]'
-    try:
-        option = group.ele(locator, timeout=2)
-    except Exception:
-        option = None
+    exact_locator = f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and normalize-space(.)="{option_label}"]]'
+    fuzzy_locator = f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and contains(normalize-space(.),"{option_label}")]]'
+
+    def find_option(current_group):
+        if not current_group:
+            return None
+        for locator in (exact_locator, fuzzy_locator):
+            try:
+                option = current_group.ele(locator, timeout=2)
+            except Exception:
+                option = None
+            if option:
+                return option
+        return None
+
+    option = find_option(group)
     if not option:
         maybe_expand_group(page, group_label, timeout=2)
         group = form_item_by_label(page, group_label, timeout=timeout)
-        try:
-            option = group.ele(locator, timeout=2) if group else None
-        except Exception:
-            option = None
+        option = find_option(group)
     if not option:
         if raise_if_missing:
             raise RuntimeError(f"Checkbox option not found: {group_label} -> {option_label}")
@@ -685,10 +765,18 @@ def click_market_option(page: ChromiumPage, pane_id: str, option_label: str, tim
     )
     if not pane:
         raise RuntimeError(f"Visible market pane not found: {pane_id}")
-    option = pane.ele(
-        f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and contains(normalize-space(.),"{option_label}")]]',
-        timeout=timeout,
-    )
+
+    exact_locator = f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and normalize-space(.)="{option_label}"]]'
+    fuzzy_locator = f'xpath:.//label[contains(@class,"el-checkbox")][.//span[contains(@class,"el-checkbox__label") and contains(normalize-space(.),"{option_label}")]]'
+
+    option = None
+    for locator in (exact_locator, fuzzy_locator):
+        try:
+            option = pane.ele(locator, timeout=2)
+        except Exception:
+            option = None
+        if option:
+            break
     if not option:
         raise RuntimeError(f"Market option not found: {option_label}")
     option.click(by_js=True)
@@ -792,6 +880,7 @@ def wait_for_result_row(page: ChromiumPage, query: Query, timeout: float = 15):
     add_conditions(query.markets)
     add_conditions(query.mills)
     add_conditions(query.brands)
+    add_conditions(query.delivery_states)
     add_conditions(query.mesh_models)
     add_conditions(query.diameters)
 
@@ -806,33 +895,80 @@ def wait_for_result_row(page: ChromiumPage, query: Query, timeout: float = 15):
     return row
 
 
-def wait_for_selected_state(page: ChromiumPage, timeout: float = 10) -> None:
-    ok = wait_until(
-        page,
-        f"""
-        const box = document.querySelector('.table-operate-buttons');
-        if (!box) return false;
-        const text = box.innerText || '';
-        return text.includes('{ZH_SELECTED}') && text.includes('{ZH_ONE_ROW}');
-        """,
-        timeout=timeout,
-        interval=0.3,
+def selected_result_count(page: ChromiumPage) -> int:
+    try:
+        text = page.run_js(
+            """
+            const box = document.querySelector('.table-operate-buttons');
+            return box ? (box.innerText || '') : '';
+            """
+        ) or ''
+    except Exception:
+        return 0
+
+    import re
+
+    pattern = re.escape(ZH_SELECTED) + r"\s*[?(]\s*(\d+)\s*?\s*[?)]"
+    match = re.search(pattern, text)
+    if match:
+        return int(match.group(1))
+    if ZH_SELECTED in text and ZH_ONE_ROW in text:
+        return 1
+    return 0
+
+
+def wait_for_selected_state(page: ChromiumPage, expected_count: int = 1, timeout: float = 10) -> None:
+    end = time.time() + timeout
+    while time.time() < end:
+        current_count = selected_result_count(page)
+        if current_count >= expected_count:
+            return
+        if expected_count <= 1 and current_count == 1:
+            return
+        time.sleep(0.3)
+    raise RuntimeError(f"Selected-state indicator did not reach expected count: {expected_count}")
+
+
+def select_all_search_results(page: ChromiumPage, query: Query) -> None:
+    rows = page.eles(
+        'xpath://table[contains(@class,"el-table__body")]//tr[contains(@class,"el-table__row")]',
+        timeout=10,
     )
-    if not ok:
-        raise RuntimeError("Selected-state indicator did not appear")
+    if not rows:
+        raise RuntimeError(f"No result rows found for query: {query.name}")
+
+    if selected_result_count(page) >= len(rows):
+        log_stage(f"All result rows already selected ({len(rows)} row(s))")
+        return
+
+    header_checkbox = page.ele(
+        'xpath://table[contains(@class,"el-table__header")]//th[contains(@class,"el-table-column--selection")]//label[contains(@class,"el-checkbox") and not(contains(@class,"is-disabled"))]',
+        timeout=5,
+    )
+    if header_checkbox:
+        log_stage(f"Selecting all result rows ({len(rows)} row(s))")
+        header_checkbox.click(by_js=True)
+        human_pause(1.0, 1.6)
+        return
+
+    log_stage("Header select-all checkbox not found; falling back to row-by-row selection")
+    for row in rows:
+        try:
+            checkbox = row.ele(
+                'xpath:.//td[contains(@class,"el-table-column--selection")]//label[contains(@class,"el-checkbox") and not(contains(@class,"is-checked"))]',
+                timeout=1,
+            )
+        except Exception:
+            checkbox = None
+        if checkbox:
+            checkbox.click(by_js=True)
+            human_pause(0.2, 0.5)
+
+    human_pause(0.8, 1.4)
 
 
 def select_search_result(page: ChromiumPage, query: Query) -> None:
-    row = wait_for_result_row(page, query)
-    checkbox = row.ele(
-        'xpath:.//td[contains(@class,"el-table-column--selection")]//label[contains(@class,"el-checkbox")]',
-        timeout=5,
-    )
-    if not checkbox:
-        raise RuntimeError("Result-row checkbox not found")
-    checkbox.click(by_js=True)
-    human_pause(0.6, 1.0)
-    wait_for_selected_state(page, timeout=10)
+    select_all_search_results(page, query)
 
 
 def click_export_excel_button(page: ChromiumPage) -> None:
@@ -904,6 +1040,8 @@ def apply_filters(page: ChromiumPage, query: Query, manual_date: bool = False) -
             "click_sub_nav": click_sub_nav,
         },
     )
+    normalize_price_tabs(page, DEFAULT_URL)
+    ensure_price_page(page, DEFAULT_URL)
 
     profile = product_profile(query)
 
@@ -932,7 +1070,10 @@ def apply_filters(page: ChromiumPage, query: Query, manual_date: bool = False) -
         click_checkbox_in_group(page, profile.get("extra_groups", {}).get("mesh_models", ZH_MESH_MODEL), item)
     for item in query.brands:
         log_stage(f"Selecting brand: {item}")
-        click_checkbox_in_group(page, profile.get("extra_groups", {}).get("brands", ZH_BRAND), item)
+        click_checkbox_in_group(page, profile.get("extra_groups", {}).get("brands", ZH_BRAND), item, raise_if_missing=False)
+    for item in query.delivery_states:
+        log_stage(f"Selecting delivery status: {item}")
+        click_checkbox_in_group(page, profile.get("extra_groups", {}).get("delivery_states", ZH_DELIVERY_STATUS), item, raise_if_missing=False)
     for item in query.diameters:
         log_stage(f"Selecting diameter: {item}")
         click_checkbox_in_group(page, profile.get("extra_groups", {}).get("diameters", ZH_DIAMETER), item, raise_if_missing=False)
@@ -943,7 +1084,10 @@ def apply_filters(page: ChromiumPage, query: Query, manual_date: bool = False) -
         pane_id = click_market_tab(page, query.market_group)
     for item in query.markets:
         log_stage(f"Selecting market: {item}")
-        click_market_option(page, pane_id, item)
+        if pane_id:
+            click_market_option(page, pane_id, item)
+        else:
+            click_checkbox_in_group(page, profile.get("market_label", ZH_MARKET), item)
     for item in query.mills:
         log_stage(f"Selecting mill/origin: {item}")
         click_checkbox_in_any_group(page, profile.get("mill_labels", [ZH_MILL]), item)
@@ -1039,6 +1183,7 @@ def load_queries(config_path: Path, fallback_date: str) -> list[Query]:
             markets=ensure_list(merged.get("market") or merged.get("markets")),
             mills=ensure_list(merged.get("mill") or merged.get("mills")),
             brands=ensure_list(merged.get("brand") or merged.get("brands")),
+            delivery_states=ensure_list(merged.get("delivery_state") or merged.get("delivery_states")),
             mesh_models=ensure_list(merged.get("mesh_model") or merged.get("mesh_models")),
             diameters=ensure_list(merged.get("diameter") or merged.get("diameters")),
             price_scope=str(merged.get("price_scope") or ""),
@@ -1096,6 +1241,7 @@ def main() -> int:
     username = env.get("MYSTEEL_USERNAME", "")
     password = env.get("MYSTEEL_PASSWORD", "")
     download_dir_str = args.download_dir or env.get("MYSTEEL_DOWNLOAD_DIR", "data")
+    chrome_path = env.get("MYSTEEL_CHROME_PATH", "")
     manual_date = args.manual_date or parse_bool(env.get("MYSTEEL_MANUAL_DATE"), default=False)
     force_run_non_workday = args.force_run_non_workday or parse_bool(env.get("MYSTEEL_FORCE_RUN_NON_WORKDAY"), default=False)
     random_start_enabled = parse_bool(env.get("MYSTEEL_RANDOM_START_ENABLED"), default=True)
@@ -1120,7 +1266,7 @@ def main() -> int:
         log_stage(f"Strategy filter applied: {args.strategy} ({len(queries)} query/queries)")
     download_dir = Path(download_dir_str)
     output_dir = Path(args.output_dir)
-    page = create_page(Path(args.user_data_dir), download_dir)
+    page = create_page(Path(args.user_data_dir), download_dir, chrome_path=chrome_path)
     summaries: list[dict[str, Any]] = []
 
     try:
