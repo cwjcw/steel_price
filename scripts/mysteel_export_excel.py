@@ -162,6 +162,8 @@ DEFAULT_URL = "https://price.mysteel.com/#/price-search?breedId=1-3"
 WORKDAY_API_TEMPLATE = "https://timor.tech/api/holiday/info/{date}"
 ENV_PATH = Path(".env")
 CONFIG_PATH = Path("queries.toml")
+TOTAL_PRICE_FILENAME = "Total_Price.xlsx"
+
 CHROME_BINARY_CANDIDATES = [
     Path(r"C:\Users\KN426\AppData\Local\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
@@ -396,10 +398,13 @@ def latest_file(directory: Path, pattern: str) -> Path | None:
 def clear_download_dir(download_dir: Path) -> int:
     removed = 0
     patterns = ("*.xlsx", "*.xls", "~$*.xlsx", "~$*.xls")
+    protected_names = {TOTAL_PRICE_FILENAME.lower(), f"~${TOTAL_PRICE_FILENAME}".lower()}
     seen: set[Path] = set()
     for pattern in patterns:
         for path in download_dir.glob(pattern):
             if path in seen or not path.is_file():
+                continue
+            if path.name.lower() in protected_names:
                 continue
             seen.add(path)
             try:

@@ -65,6 +65,7 @@ SEP = "："
 PRICE_COL_INDEX = OUTPUT_HEADERS.index(COL_PRICE) + 1
 DATE_COL_INDEX = OUTPUT_HEADERS.index(COL_DATE) + 1
 DATE_NUMBER_FORMAT = "yyyy-mm-dd"
+TOTAL_PRICE_SHEET = "Total_Price"
 
 
 @dataclass
@@ -336,7 +337,9 @@ def load_existing_rows(output_path: Path) -> list[list[Any]]:
     if not output_path.exists():
         return []
     wb = load_workbook(output_path, data_only=True)
-    ws = wb.active
+    if TOTAL_PRICE_SHEET not in wb.sheetnames:
+        raise RuntimeError(f"Sheet '{TOTAL_PRICE_SHEET}' not found in workbook: {output_path}")
+    ws = wb[TOTAL_PRICE_SHEET]
     headers = [normalize_text(ws.cell(1, c).value) for c in range(1, ws.max_column + 1)]
     supported_headers = (OUTPUT_HEADERS, BASE_HEADERS, LEGACY_HEADERS_NO_PRICE)
     if headers not in supported_headers:
@@ -352,7 +355,7 @@ def write_total_price(rows: list[list[Any]], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
-    ws.title = "Total_Price"
+    ws.title = TOTAL_PRICE_SHEET
     ws.append(OUTPUT_HEADERS)
     for row in rows:
         ws.append(row)
