@@ -830,6 +830,117 @@ def click_publish_type(page: ChromiumPage, label_text: str, timeout: float = 8) 
     human_pause(0.9, 1.6)
 
 
+def _visible_date_picker_root(page: ChromiumPage, timeout: float = 4):
+    return page.ele(
+        'xpath://div[contains(@class,"el-picker-panel") and not(contains(@style,"display: none")) and .//div[contains(@class,"el-date-range-picker__header")]]',
+        timeout=timeout,
+    )
+
+
+def _picker_visible_months(page: ChromiumPage) -> list[tuple[int, int]]:
+    data = page.run_js(
+        r"""
+        const roots = [...document.querySelectorAll('.el-picker-panel')];
+        const root = roots.find((item) => item.offsetParent !== null && item.querySelector('.el-date-range-picker__header'));
+        if (!root) return [];
+        const parseHeader = (text) => {
+            const normalized = String(text || '').replace(/\s+/g, '');
+            const match = normalized.match(/(\d{4})\D+(\d{1,2})\D*/);
+            return match ? [Number(match[1]), Number(match[2])] : null;
+        };
+        return [...root.querySelectorAll('.el-date-range-picker__content')].map((content) => {
+            const header = content.querySelector('.el-date-range-picker__header div');
+            return parseHeader(header ? header.textContent : '');
+        }).filter(Boolean);
+        """
+    )
+    months: list[tuple[int, int]] = []
+    for item in data or []:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            months.append((int(item[0]), int(item[1])))
+    return months
+
+
+def _picker_navigate_one_month(page: ChromiumPage, direction: str) -> bool:
+    if direction not in {"prev", "next"}:
+        raise ValueError(f"Unsupported picker navigation direction: {direction}")
+
+    script = """
+        const direction = "%s";
+        const roots = [...document.querySelectorAll('.el-picker-panel')];
+        const root = roots.find((item) => item.offsetParent !== null && item.querySelector('.el-date-range-picker__header'));
+        if (!root) return false;
+        const panels = [...root.querySelectorAll('.el-date-range-picker__content')];
+        if (!panels.length) return false;
+        const targetPanel = direction === 'prev' ? panels[0] : panels[panels.length - 1];
+        const buttons = [...targetPanel.querySelectorAll('.el-date-range-picker__header button')];
+        const wanted = direction === 'prev'
+            ? buttons.find((btn) => btn.className.includes('arrow-left') && !btn.className.includes('d-arrow'))
+            : buttons.find((btn) => btn.className.includes('arrow-right') && !btn.className.includes('d-arrow'));
+        const fallback = direction === 'prev' ? buttons[0] : buttons[buttons.length - 1];
+        const button = wanted || fallback;
+        if (!button) return false;
+        button.click();
+        return true;
+    """ % direction
+    return bool(page.run_js(script))
+
+
+def _move_picker_to_month(page: ChromiumPage, target_year: int, target_month: int, max_steps: int = 24) -> None:
+    target_index = target_year * 12 + (target_month - 1)
+    for _ in range(max_steps):
+        months = _picker_visible_months(page)
+        if len(months) < 2:
+            break
+        left_index = months[0][0] * 12 + (months[0][1] - 1)
+        right_index = months[-1][0] * 12 + (months[-1][1] - 1)
+        if left_index <= target_index <= right_index:
+            return
+        direction = "prev" if target_index < left_index else "next"
+        if not _picker_navigate_one_month(page, direction):
+            break
+        human_pause(0.2, 0.5)
+    raise RuntimeError(f"Could not navigate picker to target month {target_year:04d}-{target_month:02d}")
+
+
+def _picker_select_day(page: ChromiumPage, target_year: int, target_month: int, target_day: int) -> None:
+    result = page.run_js(
+        r"""
+        const year = %d;
+        const month = %d;
+        const day = %d;
+        const roots = [...document.querySelectorAll('.el-picker-panel')];
+        const root = roots.find((item) => item.offsetParent !== null && item.querySelector('.el-date-range-picker__header'));
+        if (!root) return 'no-root';
+
+        const parseHeader = (text) => {
+            const normalized = String(text || '').replace(/\s+/g, '');
+            const match = normalized.match(/(\d{4})\D+(\d{1,2})\D*/);
+            return match ? [Number(match[1]), Number(match[2])] : null;
+        };
+
+        for (const content of root.querySelectorAll('.el-date-range-picker__content')) {
+            const header = content.querySelector('.el-date-range-picker__header div');
+            const headerValue = parseHeader(header ? header.textContent : '');
+            if (!headerValue) continue;
+            if (headerValue[0] !== year || headerValue[1] !== month) continue;
+
+            const cells = [...content.querySelectorAll('td.available:not(.disabled):not(.prev-month):not(.next-month) span')];
+            const matched = cells.find((cell) => Number(String(cell.textContent || '').trim()) === day);
+            if (!matched) return 'no-day';
+            matched.click();
+            return 'selected';
+        }
+        return 'no-month';
+        """
+        % (target_year, target_month, target_day)
+    )
+    if result != "selected":
+        raise RuntimeError(
+            f"Could not select {target_year:04d}-{target_month:02d}-{target_day:02d} in picker (status: {result})"
+        )
+
+
 def set_date_via_picker(page: ChromiumPage, start_date: str, end_date: str, timeout: float = 10) -> None:
     start = datetime.strptime(start_date, "%Y-%m-%d").date()
     end = datetime.strptime(end_date, "%Y-%m-%d").date()
@@ -842,20 +953,15 @@ def set_date_via_picker(page: ChromiumPage, start_date: str, end_date: str, time
         raise RuntimeError("Date-range editor not found")
     editor.click(by_js=True)
     human_pause(0.8, 1.4)
+    if not _visible_date_picker_root(page, timeout=timeout):
+        raise RuntimeError("Date-range picker panel did not open")
 
-    def click_day(day_value: int) -> None:
-        locator = (
-            'xpath://div[contains(@class,"el-picker-panel") and not(contains(@style,"display: none"))]'
-            f'//td[contains(@class,"available") and not(contains(@class,"disabled"))]//span[normalize-space(text())="{day_value}"]'
-        )
-        elements = page.eles(locator, timeout=4)
-        if not elements:
-            raise RuntimeError(f"Could not find selectable date cell for day {day_value}")
-        elements[0].click(by_js=True)
-        human_pause(0.3, 0.7)
+    _move_picker_to_month(page, start.year, start.month)
+    _picker_select_day(page, start.year, start.month, start.day)
+    human_pause(0.3, 0.7)
 
-    click_day(start.day)
-    click_day(end.day)
+    _move_picker_to_month(page, end.year, end.month)
+    _picker_select_day(page, end.year, end.month, end.day)
     human_pause(0.8, 1.4)
 
 
