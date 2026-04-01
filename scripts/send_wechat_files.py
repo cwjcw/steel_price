@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from pprint import pformat
 
@@ -12,6 +13,30 @@ def parse_recipients(raw: str) -> list[str]:
     normalized = raw.replace(";", ",").replace("|", ",").replace("\n", ",")
     return [item.strip() for item in normalized.split(",") if item.strip()]
 
+
+
+
+def env_presence(name: str) -> str:
+    value = os.getenv(name)
+    return "set" if value else "missing"
+
+
+def debug_context(path: Path, recipient: str, result: object | None = None) -> str:
+    payload = {
+        "file": str(path),
+        "file_exists": path.exists(),
+        "recipient": recipient,
+        "cwd": str(Path.cwd()),
+        "python_executable": sys.executable,
+        "pythonpath": os.getenv("PYTHONPATH", ""),
+        "wx_corp_id": env_presence("WX_CORP_ID"),
+        "wx_agent_id": env_presence("WX_AGENT_ID"),
+        "wx_secret": env_presence("WX_SECRET"),
+        "wechat_tousers": os.getenv("WECHAT_TOUSERS", ""),
+        "result_type": type(result).__name__ if result is not None else "NoneType",
+        "result": format_wecom_result(result),
+    }
+    return pformat(payload, compact=False, sort_dicts=False)
 
 def format_wecom_result(result: object) -> str:
     if result is None:
@@ -24,14 +49,14 @@ def format_wecom_result(result: object) -> str:
     return pformat(result, compact=True)
 
 
-def ensure_wecom_success(result: object, recipient: str) -> None:
+def ensure_wecom_success(result: object, recipient: str, path: Path) -> None:
     if result is None:
         raise RuntimeError(
-            f"WeCom send returned None for recipient {recipient}. Check PYTHONPATH, WX_* environment variables, and upstream API responses."
+            f"WeCom send returned None for recipient {recipient}.\nDebug context:\n{debug_context(path, recipient, result)}"
         )
     if isinstance(result, dict) and result.get("errcode") not in (None, 0):
         raise RuntimeError(
-            f"WeCom send failed for recipient {recipient}: {format_wecom_result(result)}"
+            f"WeCom send failed for recipient {recipient}: {format_wecom_result(result)}\nDebug context:\n{debug_context(path, recipient, result)}"
         )
 
 
@@ -64,11 +89,23 @@ def main() -> int:
             "Unable to import wechat.py. Set PYTHONPATH to the basic_code repository root before running this script."
         ) from exc
 
+    print("WeCom debug summary:")
+    print(pformat({
+        "python_executable": sys.executable,
+        "pythonpath": os.getenv("PYTHONPATH", ""),
+        "wx_corp_id": env_presence("WX_CORP_ID"),
+        "wx_agent_id": env_presence("WX_AGENT_ID"),
+        "wx_secret": env_presence("WX_SECRET"),
+        "recipients": recipients,
+        "files": [str(path) for path in file_args],
+    }, compact=False, sort_dicts=False))
+
     pusher = WeChatPusher()
     for path in file_args:
         for recipient in recipients:
+            print(f"Sending {path.name} to {recipient} ...")
             result = pusher.send_app_msg(str(path), msg_type="file", touser=recipient)
-            ensure_wecom_success(result, recipient)
+            ensure_wecom_success(result, recipient, path)
             print(f"Sent {path.name} to {recipient}: {format_wecom_result(result)}")
     return 0
 
