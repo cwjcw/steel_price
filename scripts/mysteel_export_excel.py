@@ -396,7 +396,7 @@ def latest_file(directory: Path, pattern: str) -> Path | None:
 
 
 def safe_filename(value: str) -> str:
-    text = normalize_text(value)
+    text = str(value or "").strip()
     if not text:
         return "download"
     text = re.sub(r'[\/:*?"<>|]+', '_', text)
