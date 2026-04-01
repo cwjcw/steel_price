@@ -82,3 +82,12 @@ material = ["304/2B"]
 specification = ["1*1219*3048", "1*1219*2438", "1*1000*2000"]
 brand = ["永旺"]
 mill = ["印尼永旺"]
+
+[[strategies.stainless_flat.queries]]
+name = "冷轧不锈平板_佛山_201J212B"
+product_name = ["冷轧不锈平板"]
+market = ["佛山"]
+material = ["201J2/2B"]
+specification = ["0.58*1219*2438", "0.58*1219*3048", "1.15*1000*2000"]
+brand = ["宏旺"]
+mill = ["宏旺"]

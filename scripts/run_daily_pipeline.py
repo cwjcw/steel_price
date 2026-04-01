@@ -17,9 +17,10 @@ def run_step(args: list[str], title: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run export -> summary -> optional WeCom send")
+    parser = argparse.ArgumentParser(description="Run export -> summary -> MariaDB upload -> optional WeCom send")
     parser.add_argument("--strategy", default="", help="Optional single strategy, for example: cold_rolling")
     parser.add_argument("--run-date", default="", help="Summary date in YYYY-MM-DD, default is today")
+    parser.add_argument("--skip-db", action="store_true", help="Skip MariaDB upload")
     parser.add_argument("--skip-send", action="store_true", help="Skip WeCom sending")
     parser.add_argument("--send-file", action="append", default=[], help="Extra file path to send, can be repeated")
     parser.add_argument("--touser", default="", help="Override WECHAT_TOUSERS for this run")
@@ -34,6 +35,10 @@ def main() -> int:
     if args.run_date:
         summary_args.extend(["--run-date", args.run_date])
     run_step(summary_args, "build Total_Price.xlsx")
+
+    if not args.skip_db:
+        db_args = ["scripts/upload_total_price_to_mariadb.py"]
+        run_step(db_args, "upload Total_Price.xlsx to MariaDB")
 
     if not args.skip_send:
         send_args = ["scripts/send_wechat_files.py"]

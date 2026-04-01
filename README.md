@@ -388,7 +388,7 @@ $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
 uv run python .\scripts\send_wechat_files.py --file .\data\Total_Price.xlsx
 ```
 
-### 一键执行导出、汇总、发送
+### 一键执行导出、汇总、入库、发送
 
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
@@ -399,13 +399,21 @@ uv run python .\scripts\run_daily_pipeline.py
 
 1. 导出 Mysteel Excel
 2. 生成 `Total_Price.xlsx`
-3. 发送企业微信文件
+3. 写入 MariaDB
+4. 发送企业微信文件
 
-如果当天只想导出并汇总，不发送微信：
+如果当天只想导出、汇总并写入 MariaDB，不发送微信：
 
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
 uv run python .\scripts\run_daily_pipeline.py --skip-send
+```
+
+如果当天只想导出并汇总，不写 MariaDB 也不发微信：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\run_daily_pipeline.py --skip-db --skip-send
 ```
 
 ### Ubuntu / Linux 运行示例
