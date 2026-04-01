@@ -261,7 +261,20 @@ $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
 uv sync
 ```
 
-### 单独运行某个策略
+### 四个独立运行节点
+
+下面这 4 个节点都可以单独运行，便于分步排查。
+
+### 1. 单独跑爬虫导出 Excel
+
+全量导出：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\mysteel_export_excel.py
+```
+
+只跑某个策略：
 
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
@@ -275,23 +288,25 @@ uv run python .\scripts\mysteel_export_excel.py --strategy cold_rolling
 - `building_steel`
 - `stainless_flat`
 
-### 全量运行
+这一步只负责导出 Mysteel 原始 Excel 和生成 `output/mysteel_export_*.json` 摘要。
 
-```powershell
-$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
-uv run python .\scripts\mysteel_export_excel.py
-```
+### 2. 单独汇总到 Excel
 
-### 生成汇总表
+汇总当天导出结果：
 
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
 uv run python .\scripts\build_total_price.py
 ```
 
-这个脚本会读取当天的导出结果摘要，并把数据整理成固定文件：
+汇总历史文件夹 `data/hisdata` 到 `data/Total_Price.xlsx`：
 
-- `data/Total_Price.xlsx`
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\test\汇总历史数据.py --skip-db
+```
+
+这个脚本会在 `Total_Price.xlsx` 不存在时自动先生成，再把历史数据汇总进去。
 
 输出字段固定为：
 
@@ -314,11 +329,43 @@ uv run python .\scripts\build_total_price.py
 - `记录ID` 会按关键字段生成稳定 ID，适合后续写入数据库
 - `价格` 以数值格式写入，单元格显示格式为 `0.00`
 - `日期` 以日期单元格写入，单元格显示格式为 `yyyy-mm-dd`
-- 脚本会保留 `Total_Price.xlsx` 里已有的数据，只在末尾追加新的记录
+- 脚本会保留 `Total_Price.xlsx` 里已有的数据，只追加新记录
 - 同一条记录再次运行时不会重复追加
-- 旧版没有 `记录ID` 或没有 `价格` 列的汇总表，脚本会在下次运行时自动升级兼容
+- 旧版没有 `记录ID` 或没有 `价格` 列的汇总表，脚本会自动升级兼容
 
-### 发送企业微信文件
+### 3. 单独写入 MariaDB
+
+先在 `.env` 中配置这些参数：
+
+- `MARIADB_HOST`
+- `MARIADB_PORT`
+- `MARIADB_USER`
+- `MARIADB_PASSWORD`
+- `MARIADB_DATABASE`
+- `MARIADB_TABLE`
+
+只把现有 `data/Total_Price.xlsx` 写入 MariaDB：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\upload_total_price_to_mariadb.py
+```
+
+如果你想“先汇总历史数据，再写入 MariaDB”，分两步执行：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\test\汇总历史数据.py
+uv run python .\scripts\upload_total_price_to_mariadb.py
+```
+
+说明：
+
+- 如果 `data/Total_Price.xlsx` 不存在，需要先运行历史汇总脚本或日常汇总脚本生成它
+- 数据库和数据表不存在时，脚本会自动创建
+- 写入方式是 `INSERT ... ON DUPLICATE KEY UPDATE`，主键为 `record_id`
+
+### 4. 单独发送企业微信
 
 先确保这些条件满足：
 
@@ -476,3 +523,4 @@ holiday API unavailable ... fallback weekday rule used
 3. 在 `registry.py` 中注册这个策略
 4. 先用 `--strategy <新策略名>` 单独调通
 5. 再做全量运行验证
+
