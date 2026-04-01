@@ -395,6 +395,29 @@ def latest_file(directory: Path, pattern: str) -> Path | None:
     return files[0] if files else None
 
 
+def safe_filename(value: str) -> str:
+    text = normalize_text(value)
+    if not text:
+        return "download"
+    text = re.sub(r'[\/:*?"<>|]+', '_', text)
+    text = re.sub(r'\s+', '_', text).strip(' ._')
+    return text or "download"
+
+
+def rename_downloaded_file(downloaded_file: Path, query: Query) -> Path:
+    suffix = downloaded_file.suffix or '.xlsx'
+    base_name = f"{safe_filename(query.name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    target = downloaded_file.with_name(base_name + suffix)
+    counter = 1
+    while target.exists() and target != downloaded_file:
+        target = downloaded_file.with_name(f"{base_name}_{counter}{suffix}")
+        counter += 1
+    if target == downloaded_file:
+        return downloaded_file
+    downloaded_file.replace(target)
+    return target
+
+
 def clear_download_dir(download_dir: Path) -> int:
     removed = 0
     patterns = ("*.xlsx", "*.xls", "~$*.xlsx", "~$*.xls")
@@ -1242,18 +1265,22 @@ def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path |
     log_stage("Clicking Export Excel")
     click_export_excel_button(page)
     log_stage("Confirming export dialog")
-    before_latest = latest_file(download_dir, "*.xlsx")
+    started_after = time.time()
     confirm_export_dialog(page)
-    log_stage("Export confirmed; skipping strict download wait")
-    human_pause(2.0, 3.5)
+    log_stage("Export confirmed; waiting for download completion")
 
-    after_latest = latest_file(download_dir, "*.xlsx")
-    if after_latest and (not before_latest or after_latest != before_latest or after_latest.stat().st_mtime >= time.time() - 120):
-        log_stage(f"Latest downloaded file detected: {after_latest.name}")
-        return after_latest
+    try:
+        downloaded = wait_for_download(page, download_dir, started_after=started_after, timeout=60)
+    except Exception as exc:
+        log_stage(f"Download wait failed ({exc}); falling back to latest file detection")
+        downloaded = latest_file(download_dir, "*.xlsx")
+        if not downloaded:
+            log_stage("No downloadable file detected yet; continuing without download verification")
+            return None
 
-    log_stage("No downloadable file detected yet; continuing without download verification")
-    return after_latest
+    renamed = rename_downloaded_file(downloaded, query)
+    log_stage(f"Downloaded file captured: {renamed.name}")
+    return renamed
 
 
 def build_result(query: Query, page: ChromiumPage, downloaded_file: Path | None, output_dir: Path, elapsed_seconds: float) -> Path:
