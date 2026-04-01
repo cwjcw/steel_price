@@ -3,6 +3,7 @@
 import argparse
 import json
 import random
+import re
 import tomllib
 import sys
 import time
