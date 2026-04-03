@@ -74,6 +74,7 @@ class Profile:
     subcategory: str
     second_nav: str = ""
     third_nav: str = ""
+    publish_time: str = "全天价格"
 
 
 @dataclass
@@ -99,8 +100,8 @@ FILE_PROFILES: dict[str, Profile] = {
     "酸洗板.xlsx": Profile("hot_rolling", "钢材", "热轧"),
     "冷轧线.xlsx": Profile("building_steel", "钢材", "建筑钢材"),
     "热轧线.xlsx": Profile("building_steel", "钢材", "建筑钢材"),
-    "201不锈钢板.xlsx": Profile("stainless_flat", "钢材", "不锈钢", "不锈钢", "不锈钢平板"),
-    "304不锈钢板.xlsx": Profile("stainless_flat", "钢材", "不锈钢", "不锈钢", "不锈钢平板"),
+    "201不锈钢板.xlsx": Profile("stainless_flat", "镍铬不锈钢", "不锈钢", "不锈钢", "不锈钢平板"),
+    "304不锈钢板.xlsx": Profile("stainless_flat", "镍铬不锈钢", "不锈钢", "不锈钢", "不锈钢平板"),
 }
 
 
@@ -166,7 +167,7 @@ def infer_profile(file_path: Path, product_hint: str = "") -> Profile:
 
     hint = f"{file_path.stem} {product_hint}"
     if "不锈" in hint:
-        return Profile("stainless_flat", "钢材", "不锈钢", "不锈钢", "不锈钢平板")
+        return Profile("stainless_flat", "镍铬不锈钢", "不锈钢", "不锈钢", "不锈钢平板")
     if "焊接网" in hint:
         return Profile("building_steel", "钢材", "建筑钢材")
     if "冷" in hint:
@@ -191,7 +192,7 @@ def build_meta_from_workbook(path: Path) -> RunMeta:
         markets=[],
         mills=[],
         brands=[],
-        publish_time="",
+        publish_time=profile.publish_time,
         downloaded_file=path,
     )
 
