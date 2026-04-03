@@ -2,7 +2,6 @@
 
 import argparse
 import hashlib
-import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -68,6 +67,15 @@ DATE_NUMBER_FORMAT = "yyyy-mm-dd"
 TOTAL_PRICE_SHEET = "Total_Price"
 
 
+@dataclass(frozen=True)
+class Profile:
+    execution_strategy: str
+    category: str
+    subcategory: str
+    second_nav: str = ""
+    third_nav: str = ""
+
+
 @dataclass
 class RunMeta:
     execution_strategy: str
@@ -85,12 +93,15 @@ class RunMeta:
     downloaded_file: Path
 
 
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def run_date_default() -> str:
-    return date.today().isoformat()
+FILE_PROFILES: dict[str, Profile] = {
+    "冷轧板.xlsx": Profile("cold_rolling", "钢材", "冷轧"),
+    "热轧板.xlsx": Profile("hot_rolling", "钢材", "热轧"),
+    "酸洗板.xlsx": Profile("hot_rolling", "钢材", "热轧"),
+    "冷轧线.xlsx": Profile("building_steel", "钢材", "建筑钢材"),
+    "热轧线.xlsx": Profile("building_steel", "钢材", "建筑钢材"),
+    "201不锈钢板.xlsx": Profile("stainless_flat", "钢材", "不锈钢", "不锈钢", "不锈钢平板"),
+    "304不锈钢板.xlsx": Profile("stainless_flat", "钢材", "不锈钢", "不锈钢", "不锈钢平板"),
+}
 
 
 def normalize_text(value: Any) -> str:
@@ -148,34 +159,52 @@ def with_record_id(base_row: list[Any]) -> list[Any]:
     return [build_record_id(base_row), *base_row]
 
 
-def iter_today_runs(output_dir: Path, run_date: str) -> list[RunMeta]:
+def infer_profile(file_path: Path, product_hint: str = "") -> Profile:
+    profile = FILE_PROFILES.get(file_path.name)
+    if profile:
+        return profile
+
+    hint = f"{file_path.stem} {product_hint}"
+    if "不锈" in hint:
+        return Profile("stainless_flat", "钢材", "不锈钢", "不锈钢", "不锈钢平板")
+    if "焊接网" in hint:
+        return Profile("building_steel", "钢材", "建筑钢材")
+    if "冷" in hint:
+        return Profile("cold_rolling", "钢材", "冷轧")
+    return Profile("hot_rolling", "钢材", "热轧")
+
+
+def build_meta_from_workbook(path: Path) -> RunMeta:
+    wb = load_workbook(path, data_only=True)
+    ws = wb.active
+    product_hint = normalize_text(ws.cell(1, 2).value)
+    profile = infer_profile(path, product_hint)
+    return RunMeta(
+        execution_strategy=profile.execution_strategy,
+        category=profile.category,
+        subcategory=profile.subcategory,
+        second_nav=profile.second_nav,
+        third_nav=profile.third_nav,
+        product_names=[],
+        specifications=[],
+        materials=[],
+        markets=[],
+        mills=[],
+        brands=[],
+        publish_time="",
+        downloaded_file=path,
+    )
+
+
+def iter_workbook_runs(data_dir: Path, output_file: str) -> list[RunMeta]:
+    output_name = Path(output_file).name.lower()
     metas: list[RunMeta] = []
-    for path in sorted(output_dir.glob("mysteel_export_*.json")):
-        payload = load_json(path)
-        captured_at = normalize_text(payload.get("captured_at"))
-        if not captured_at.startswith(run_date):
+    for path in sorted(data_dir.glob("*.xlsx")):
+        if not path.is_file() or path.name.startswith("~$"):
             continue
-        query = payload.get("query") or {}
-        downloaded_file = Path(normalize_text(payload.get("downloaded_file")))
-        if not downloaded_file.exists() or downloaded_file.name.startswith("~$"):
+        if path.name.lower() == output_name:
             continue
-        metas.append(
-            RunMeta(
-                execution_strategy=normalize_text(query.get("execution_strategy")),
-                category=normalize_text(query.get("category")),
-                subcategory=normalize_text(query.get("subcategory")),
-                second_nav=normalize_text(query.get("second_nav")),
-                third_nav=normalize_text(query.get("third_nav")),
-                product_names=[normalize_text(item) for item in (query.get("product_names") or []) if normalize_text(item)],
-                specifications=[normalize_text(item) for item in (query.get("specifications") or []) if normalize_text(item)],
-                materials=[normalize_text(item) for item in (query.get("materials") or []) if normalize_text(item)],
-                markets=[normalize_text(item) for item in (query.get("markets") or []) if normalize_text(item)],
-                mills=[normalize_text(item) for item in (query.get("mills") or []) if normalize_text(item)],
-                brands=[normalize_text(item) for item in (query.get("brands") or []) if normalize_text(item)],
-                publish_time=normalize_text(query.get("publish_time")),
-                downloaded_file=downloaded_file,
-            )
-        )
+        metas.append(build_meta_from_workbook(path))
     return metas
 
 
@@ -209,6 +238,10 @@ def parse_matrix_product(meta: RunMeta, product_text: str) -> dict[str, str]:
         result[COL_SPEC] = " / ".join(item for item in [spec, mesh] if item)
         if len(parts) > 5:
             result[COL_MARKET] = parts[5]
+        if len(parts) > 6:
+            result["企业/钢厂"] = parts[6]
+        if len(parts) > 7:
+            result[COL_BRAND] = parts[7]
     else:
         if len(parts) > 1:
             result[COL_MATERIAL] = parts[1]
@@ -265,7 +298,11 @@ def rows_from_row_sheet(meta: RunMeta, ws) -> list[list[Any]]:
         idx = header_map.get(name)
         return normalize_text(ws.cell(row_idx, idx).value) if idx else ""
 
-    publish_time = meta.publish_time or normalize_text(ws.cell(3, 2).value)
+    publish_label = normalize_text(ws.cell(3, 1).value)
+    publish_time = meta.publish_time
+    if publish_label == "价格时间":
+        publish_time = normalize_text(ws.cell(3, 2).value) or publish_time
+
     for row_idx in range(5, ws.max_row + 1):
         date_value = normalize_excel_date(cell(row_idx, COL_DATE))
         if date_value is None:
@@ -277,6 +314,8 @@ def rows_from_row_sheet(meta: RunMeta, ws) -> list[list[Any]]:
         brand = cell(row_idx, COL_BRAND) or (meta.brands[0] if meta.brands else "")
         mill = cell(row_idx, COL_ENTERPRISE) or cell(row_idx, COL_MILL) or (meta.mills[0] if meta.mills else "")
         price = normalize_price(cell(row_idx, COL_PRICE))
+        if price is None:
+            continue
         base_row = [
             TYPE_LABELS.get(meta.execution_strategy, meta.execution_strategy),
             meta.category,
@@ -381,21 +420,23 @@ def merge_rows(existing_rows: list[list[Any]], new_rows: list[list[Any]]) -> tup
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build Total_Price.xlsx from today's exported Mysteel files")
-    parser.add_argument("--output-dir", default="output")
+    parser = argparse.ArgumentParser(description="Build Total_Price.xlsx from Excel files in the data directory")
     parser.add_argument("--data-dir", default="data")
-    parser.add_argument("--run-date", default=run_date_default(), help="Run date in YYYY-MM-DD, default is today")
     parser.add_argument("--output-file", default="Total_Price.xlsx")
     args = parser.parse_args()
 
-    metas = iter_today_runs(Path(args.output_dir), args.run_date)
+    data_dir = Path(args.data_dir)
+    metas = iter_workbook_runs(data_dir, args.output_file)
     if not metas:
-        raise RuntimeError(f"No export result json files found for run date: {args.run_date}")
+        raise RuntimeError(f"No source workbooks found in: {data_dir}")
 
     new_rows: list[list[Any]] = []
     for meta in metas:
-        new_rows.extend(extract_rows(meta))
-    output_path = Path(args.data_dir) / args.output_file
+        rows = extract_rows(meta)
+        print(f"Loaded {len(rows)} rows from {meta.downloaded_file.name}")
+        new_rows.extend(rows)
+
+    output_path = data_dir / args.output_file
     existing_rows = load_existing_rows(output_path)
     merged_rows, added_count = merge_rows(existing_rows, new_rows)
     write_total_price(merged_rows, output_path)
