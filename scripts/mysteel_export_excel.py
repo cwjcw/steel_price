@@ -1275,7 +1275,7 @@ def apply_filters(page: ChromiumPage, query: Query, manual_date: bool = False) -
     log_stage("Filters submitted; waiting for results")
 
 
-def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path | None:
+def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path:
     log_stage("Waiting for result row")
     wait_for_result_row(page, query, timeout=20)
     log_stage("Selecting result row")
@@ -1293,8 +1293,7 @@ def export_excel(page: ChromiumPage, query: Query, download_dir: Path) -> Path |
         log_stage(f"Download wait failed ({exc}); falling back to latest file detection")
         downloaded = latest_file(download_dir, "*.xlsx")
         if not downloaded:
-            log_stage("No downloadable file detected yet; continuing without download verification")
-            return None
+            raise RuntimeError(f"No downloadable Excel file detected for query: {query.name}")
 
     renamed = rename_downloaded_file(downloaded, query)
     log_stage(f"Downloaded file captured: {renamed.name}")
@@ -1423,11 +1422,15 @@ def main() -> int:
     if not username or not password:
         raise RuntimeError("MYSTEEL_USERNAME or MYSTEEL_PASSWORD is missing in .env")
 
-    today = date.today()
-    is_workday, workday_reason = is_workday_via_api(today)
-    log_stage(f"Workday check: {workday_reason}")
+    try:
+        target_day = date.fromisoformat(args.target_date)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid --target-date value: {args.target_date}") from exc
+
+    is_workday, workday_reason = is_workday_via_api(target_day)
+    log_stage(f"Workday check for target date {target_day.isoformat()}: {workday_reason}")
     if not force_run_non_workday and not is_workday:
-        log_stage(f"Today is not a workday ({today.isoformat()}); skipping run")
+        log_stage(f"Target date is not a workday ({target_day.isoformat()}); skipping run")
         return 0
 
     maybe_wait_random_start(random_start_enabled, random_start_max_minutes)
