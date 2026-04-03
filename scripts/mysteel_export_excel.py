@@ -654,18 +654,35 @@ def visible_sub_navs(page: ChromiumPage):
 def click_sub_nav(page: ChromiumPage, label_text: str, nav_index: int = 0, timeout: float = 8) -> None:
     if not label_text:
         return
-    for _ in range(2):
+    target_locator = f'xpath:.//div[contains(@class,"row") and contains(normalize-space(.),"{label_text}")]'
+    for _ in range(3):
         navs = visible_sub_navs(page)
+        ordered_navs = []
         if len(navs) > nav_index:
-            nav = navs[nav_index]
-            item = nav.ele(
-                f'xpath:.//div[contains(@class,"row") and contains(normalize-space(.),"{label_text}")]',
-                timeout=2,
-            )
+            ordered_navs.append(navs[nav_index])
+        ordered_navs.extend(nav for idx, nav in enumerate(navs) if idx != nav_index)
+
+        for nav in ordered_navs:
+            try:
+                item = nav.ele(target_locator, timeout=2)
+            except Exception:
+                item = None
             if item:
                 item.click(by_js=True)
                 human_pause(1.0, 1.8)
                 return
+
+        try:
+            fallback = page.ele(
+                f'xpath://div[contains(@class,"sub-nav__content") and not(ancestor::*[contains(@style,"display: none")])]//div[contains(@class,"row") and contains(normalize-space(.),"{label_text}")]',
+                timeout=2,
+            )
+        except Exception:
+            fallback = None
+        if fallback:
+            fallback.click(by_js=True)
+            human_pause(1.0, 1.8)
+            return
         human_pause(0.8, 1.2)
     raise RuntimeError(f"Sub-navigation option not found: {label_text}")
 

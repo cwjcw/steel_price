@@ -369,12 +369,32 @@ uv run python .\scripts\upload_total_price_to_mariadb.py
 
 先确保这些条件满足：
 
-- `PYTHONPATH` 已包含 `basic_code` 根目录
+- `.env` 中已配置 `WECHAT_CODE_DIR`，指向包含 `wechat.py` 的 `basic_code` 根目录
 - `WX_CORP_ID`、`WX_AGENT_ID`、`WX_SECRET` 已在系统环境变量中设置
 - `.env` 中已配置 `WECHAT_TOUSERS`
 - `.env` 中已配置 `WECHAT_DEFAULT_FILE`
 
+建议按机器分别配置：
+
+- 本机示例：`WECHAT_CODE_DIR=E:\code\basic_code`
+- 服务器示例：`WECHAT_CODE_DIR=E:\jerry\code\basic_code`
+
+只有在 `WECHAT_CODE_DIR` 没配置时，脚本才会回退使用 `PYTHONPATH`。
+
 然后执行：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\send_wechat_files.py
+```
+
+如果需要临时指定文件：
+
+```powershell
+$env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
+uv run python .\scripts\send_wechat_files.py --file .\data\Total_Price.xlsx
+```
+只有在 `WECHAT_CODE_DIR` 没配置时，脚本才会回退使用 `PYTHONPATH`。
 
 ```powershell
 $env:UV_CACHE_DIR='E:\code\steel_price\.uv-cache'
