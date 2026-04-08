@@ -4,6 +4,7 @@ import argparse
 import json
 import random
 import re
+import subprocess
 import tomllib
 import sys
 import time
@@ -376,9 +377,36 @@ def wait_until(page: ChromiumPage, condition_js: str, timeout: float = 10, inter
     return False
 
 
+def cleanup_stale_browser_processes(user_data_dir: Path) -> None:
+    profile_marker = str(user_data_dir.resolve()).replace("'", "''")
+    command = rf'''$ErrorActionPreference="Stop"; 
+$procs = Get-CimInstance Win32_Process -Filter "name = ''chrome.exe''" | 
+Where-Object {{ $_.CommandLine -like ''*{profile_marker}*'' }}; 
+$count = @($procs).Count; 
+if ($count -gt 0) {{ $procs | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }} }}; 
+Write-Output $count'''
+    try:
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            check=False,
+        )
+        cleaned = (completed.stdout or "").strip() or "0"
+        if completed.returncode != 0:
+            log_stage(f"Stale browser cleanup skipped: {completed.stderr.strip() or completed.returncode}")
+            return
+        log_stage(f"Cleaned stale automation Chrome processes: {cleaned}")
+    except Exception as exc:
+        log_stage(f"Stale browser cleanup skipped: {exc}")
+
+
 def create_page(user_data_dir: Path, download_dir: Path, chrome_path: str = "") -> ChromiumPage:
     user_data_dir.mkdir(parents=True, exist_ok=True)
     download_dir.mkdir(parents=True, exist_ok=True)
+    cleanup_stale_browser_processes(user_data_dir)
 
     co = ChromiumOptions()
     binary = chrome_binary(chrome_path)
@@ -1493,7 +1521,11 @@ def main() -> int:
         print(json.dumps(summaries, ensure_ascii=False, indent=2))
         return 0
     finally:
-        print("Browser left open for inspection.")
+        try:
+            log_stage("Closing browser")
+            page.quit(timeout=5, force=True)
+        except Exception as exc:
+            log_stage(f"Failed to close browser cleanly: {exc}")
 
 
 if __name__ == "__main__":
