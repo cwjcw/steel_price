@@ -8,6 +8,8 @@ from pprint import pformat
 
 from dotenv import load_dotenv
 
+DEFAULT_TEXT_MESSAGE = "您好，请查收最新的钢铁价格追踪。"
+
 
 def parse_recipients(raw: str) -> list[str]:
     normalized = raw.replace(";", ",").replace("|", ",").replace("\n", ",")
@@ -81,6 +83,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Send files to WeCom users through basic_code/wechat.py")
     parser.add_argument("--file", dest="files", action="append", default=[], help="File path to send, can be repeated")
     parser.add_argument("--touser", default=os.getenv("WECHAT_TOUSERS", ""), help="WeCom user ids, separated by comma/semicolon/|")
+    parser.add_argument("--text", default=DEFAULT_TEXT_MESSAGE, help="Text message to send before files")
     args = parser.parse_args()
 
     default_file = os.getenv("WECHAT_DEFAULT_FILE", "").strip()
@@ -121,6 +124,12 @@ def main() -> int:
     }, compact=False, sort_dicts=False))
 
     pusher = WeChatPusher()
+    for recipient in recipients:
+        if args.text.strip():
+            print(f"Sending text message to {recipient} ...")
+            result = pusher.send_app_msg(args.text.strip(), msg_type="text", touser=recipient)
+            ensure_wecom_success(result, recipient, Path(file_args[0]))
+            print(f"Sent text message to {recipient}: {format_wecom_result(result)}")
     for path in file_args:
         for recipient in recipients:
             print(f"Sending {path.name} to {recipient} ...")
