@@ -124,18 +124,30 @@ def main() -> int:
     }, compact=False, sort_dicts=False))
 
     pusher = WeChatPusher()
+    failures: list[str] = []
     for recipient in recipients:
         if args.text.strip():
             print(f"Sending text message to {recipient} ...")
             result = pusher.send_app_msg(args.text.strip(), msg_type="text", touser=recipient)
-            ensure_wecom_success(result, recipient, Path(file_args[0]))
+            error = ensure_wecom_success(result, recipient, Path(file_args[0]))
+            if error:
+                failures.append(error)
+                print(error)
+                continue
             print(f"Sent text message to {recipient}: {format_wecom_result(result)}")
     for path in file_args:
         for recipient in recipients:
             print(f"Sending {path.name} to {recipient} ...")
             result = pusher.send_app_msg(str(path), msg_type="file", touser=recipient)
-            ensure_wecom_success(result, recipient, path)
+            error = ensure_wecom_success(result, recipient, path)
+            if error:
+                failures.append(error)
+                print(error)
+                continue
             print(f"Sent {path.name} to {recipient}: {format_wecom_result(result)}")
+    if failures:
+        print(f"WeCom sending completed with {len(failures)} failure(s).")
+        return 1
     return 0
 
 
