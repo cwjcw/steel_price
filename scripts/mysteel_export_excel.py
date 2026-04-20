@@ -1098,12 +1098,12 @@ def set_date_via_inputs(page: ChromiumPage, start_date: str, end_date: str, time
 
 def set_date_range(page: ChromiumPage, start_date: str, end_date: str, manual_date: bool = False) -> None:
     if manual_date:
-        log_stage("Manual date mode enabled; filling date inputs directly")
+        log_stage("Manual date mode enabled; selecting dates from picker using configured range")
         try:
-            set_date_via_inputs(page, start_date, end_date)
+            set_date_via_picker(page, start_date, end_date)
             return
         except Exception as exc:
-            log_stage(f"Manual date input fill failed ({exc}); waiting for browser-side date input")
+            log_stage(f"Configured manual date selection failed ({exc}); waiting for browser-side date input")
             prompt_manual_date_confirmation(start_date, end_date)
             return
 
