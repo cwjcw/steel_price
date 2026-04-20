@@ -9,7 +9,7 @@ import tomllib
 import sys
 import time
 from collections import defaultdict, deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -1048,11 +1048,64 @@ def set_date_via_picker(page: ChromiumPage, start_date: str, end_date: str, time
     human_pause(0.8, 1.4)
 
 
+def set_date_via_inputs(page: ChromiumPage, start_date: str, end_date: str, timeout: float = 10) -> None:
+    editor = page.ele(
+        f'xpath://div[contains(@class,"el-form-item")][.//label[contains(normalize-space(.),"{ZH_PUBLISH_TIME}")]]//div[contains(@class,"el-date-editor--daterange") and .//input[@placeholder="{ZH_START_TIME}"] and .//input[@placeholder="{ZH_END_TIME}"]]',
+        timeout=timeout,
+    )
+    if not editor:
+        raise RuntimeError("Date-range editor not found")
+
+    start_input = editor.ele(f'xpath:.//input[@placeholder="{ZH_START_TIME}"]', timeout=timeout)
+    end_input = editor.ele(f'xpath:.//input[@placeholder="{ZH_END_TIME}"]', timeout=timeout)
+    if not start_input or not end_input:
+        raise RuntimeError("Date-range input boxes not found")
+
+    page.run_js(
+        r"""
+        const startValue = arguments[0];
+        const endValue = arguments[1];
+        const startPlaceholder = arguments[2];
+        const endPlaceholder = arguments[3];
+        const root = [...document.querySelectorAll('.el-form-item')].find((item) => {
+            const label = item.querySelector('label');
+            return label && label.textContent && label.textContent.includes(arguments[4]);
+        });
+        if (!root) return false;
+        const startInput = root.querySelector(`input[placeholder="${startPlaceholder}"]`);
+        const endInput = root.querySelector(`input[placeholder="${endPlaceholder}"]`);
+        if (!startInput || !endInput) return false;
+        for (const [input, value] of [[startInput, startValue], [endInput, endValue]]) {
+            input.focus();
+            input.value = value;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+            input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' }));
+            input.blur();
+        }
+        document.body.click();
+        return true;
+        """,
+        start_date,
+        end_date,
+        ZH_START_TIME,
+        ZH_END_TIME,
+        ZH_PUBLISH_TIME,
+    )
+    human_pause(0.8, 1.4)
+
+
 def set_date_range(page: ChromiumPage, start_date: str, end_date: str, manual_date: bool = False) -> None:
     if manual_date:
-        log_stage("Manual date mode enabled; waiting for browser-side date input")
-        prompt_manual_date_confirmation(start_date, end_date)
-        return
+        log_stage("Manual date mode enabled; filling date inputs directly")
+        try:
+            set_date_via_inputs(page, start_date, end_date)
+            return
+        except Exception as exc:
+            log_stage(f"Manual date input fill failed ({exc}); waiting for browser-side date input")
+            prompt_manual_date_confirmation(start_date, end_date)
+            return
 
     try:
         set_date_via_picker(page, start_date, end_date)
@@ -1453,6 +1506,8 @@ def main() -> int:
     clear_download_dir_enabled = parse_bool(env.get("MYSTEEL_CLEAR_DOWNLOAD_DIR"), default=True)
     chrome_path = env.get("MYSTEEL_CHROME_PATH", "")
     manual_date = args.manual_date or parse_bool(env.get("MYSTEEL_MANUAL_DATE"), default=False)
+    manual_start_date = str(env.get("MYSTEEL_STARTDATE", "")).strip()
+    manual_end_date = str(env.get("MYSTEEL_ENDDATE", "")).strip()
     force_run_non_workday = args.force_run_non_workday or parse_bool(env.get("MYSTEEL_FORCE_RUN_NON_WORKDAY"), default=False)
     random_start_enabled = parse_bool(env.get("MYSTEEL_RANDOM_START_ENABLED"), default=True)
     random_start_max_minutes = parse_int(env.get("MYSTEEL_RANDOM_START_MAX_MINUTES"), default=15)
@@ -1473,6 +1528,16 @@ def main() -> int:
     maybe_wait_random_start(random_start_enabled, random_start_max_minutes)
 
     queries = load_queries(Path(args.config), args.target_date)
+    if manual_date and manual_start_date and manual_end_date:
+        try:
+            date.fromisoformat(manual_start_date)
+            date.fromisoformat(manual_end_date)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Invalid MYSTEEL_STARTDATE or MYSTEEL_ENDDATE value: {manual_start_date} -> {manual_end_date}"
+            ) from exc
+        queries = [replace(query, start_date=manual_start_date, end_date=manual_end_date) for query in queries]
+        log_stage(f"Manual date override applied from env: {manual_start_date} -> {manual_end_date}")
     if args.strategy:
         queries = [query for query in queries if query.execution_strategy == args.strategy]
         if not queries:

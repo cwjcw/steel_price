@@ -216,6 +216,8 @@ steel_price/
 - `MYSTEEL_CLEAR_DOWNLOAD_DIR`
 - `MYSTEEL_CHROME_PATH`
 - `MYSTEEL_MANUAL_DATE`
+- `MYSTEEL_STARTDATE`
+- `MYSTEEL_ENDDATE`
 - `MYSTEEL_FORCE_RUN_NON_WORKDAY`
 - `MYSTEEL_RANDOM_START_ENABLED`
 - `MYSTEEL_RANDOM_START_MAX_MINUTES`
@@ -228,6 +230,8 @@ steel_price/
 - `MYSTEEL_CLEAR_DOWNLOAD_DIR` 控制导出前是否清空 `data/` 里的旧 Excel
 - `MYSTEEL_CHROME_PATH` 用于显式指定 Chrome 或 Chromium 可执行文件路径
 - 如果 `MYSTEEL_CHROME_PATH` 为空，脚本会回退到内置的常见 Windows 路径自动探测
+- 当 `MYSTEEL_MANUAL_DATE=true` 时，如果同时配置了 `MYSTEEL_STARTDATE` 和 `MYSTEEL_ENDDATE`，脚本会直接把这两个日期填入价格页面的开始/结束日期输入框
+- 如果日期输入框填充失败，脚本会回退为等待人工在浏览器中手动设置日期
 - `WECHAT_TOUSERS` 和 `WECHAT_DEFAULT_FILE` 用于企业微信文件发送
 
 ### 系统环境变量
@@ -461,7 +465,12 @@ uv run python .\scripts\mysteel_export_excel.py --help
 - `--target-date`
 - `--strategy`
 - `--manual-date`
-- `--force-run-non-workday`
+说明：
+
+- `--target-date` 默认是昨天
+- `--manual-date` 会启用页面日期输入框直填逻辑
+- 如果 `.env` 中同时配置了 `MYSTEEL_STARTDATE` 和 `MYSTEEL_ENDDATE`，则优先使用这两个值覆盖查询日期范围
+
 
 ## 工作日逻辑说明
 
@@ -528,6 +537,7 @@ holiday API unavailable ... fallback weekday rule used
 
 优先检查：
 
+- 如果启用了 `MYSTEEL_MANUAL_DATE=true`，检查 `MYSTEEL_STARTDATE` 和 `MYSTEEL_ENDDATE` 是否填写正确
 - 是否还没到 Mysteel 当次更新时间
 - 日期范围是否正确
 - 查询条件是否过窄
