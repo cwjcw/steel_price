@@ -55,10 +55,20 @@ publish_time = "全天价格"
 unit = "元/吨"
 
 [[strategies.building_steel.queries]]
-name = "钢筋焊接网_上海_HRB400_CRB600H"
+name = "钢筋焊接网_上海_CRB600H"
 product_name = ["钢筋焊接网"]
-specification = ["Φ6", "Φ10"]
-material = ["HRB400", "CRB600H"]
+specification = ["Φ10"]
+material = ["CRB600H"]
+mesh_model = ["100*100"]
+market_group = "QRSTU"
+market = ["上海"]
+mill = ["上海"]
+
+[[strategies.building_steel.queries]]
+name = "钢筋焊接网_上海_HRB400"
+product_name = ["钢筋焊接网"]
+specification = ["Φ6"]
+material = ["HRB400"]
 mesh_model = ["100*100"]
 market_group = "QRSTU"
 market = ["上海"]
